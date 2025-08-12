@@ -90,6 +90,37 @@ function dottorbot_user_has_consented(int $user_id): bool {
 }
 
 /**
+ * Determine if a user has a premium subscription.
+ */
+function dottorbot_user_is_premium(int $user_id): bool {
+    // WooCommerce Subscriptions check.
+    if (function_exists('wcs_user_has_subscription')) {
+        if (wcs_user_has_subscription($user_id, '', 'active')) {
+            return true;
+        }
+    }
+
+    // Fallback to user meta flag.
+    return (bool) get_user_meta($user_id, 'dottorbot_premium', true);
+}
+
+function dottorbot_get_message_count(int $user_id): int {
+    return (int) get_user_meta($user_id, 'dottorbot_message_count', true);
+}
+
+function dottorbot_increment_message_count(int $user_id): void {
+    $count = dottorbot_get_message_count($user_id);
+    update_user_meta($user_id, 'dottorbot_message_count', $count + 1);
+}
+
+function dottorbot_get_usage_limit(int $user_id): int {
+    if (dottorbot_user_is_premium($user_id)) {
+        return (int) get_option('dottorbot_premium_limit', 0);
+    }
+    return (int) get_option('dottorbot_usage_limit', 5);
+}
+
+/**
  * Log events to custom table after scrubbing PII.
  */
 function dottorbot_log_event(int $user_id, string $action, string $data = ''): void {
@@ -143,6 +174,14 @@ add_action('rest_api_init', function () {
         'permission_callback' => '__return_true',
     ]);
 
+    register_rest_route('dottorbot/v1', '/stripe/checkout', [
+        'methods'  => 'POST',
+        'callback' => 'dottorbot_stripe_checkout',
+        'permission_callback' => function () {
+            return is_user_logged_in();
+        },
+    ]);
+
     register_rest_route('dottorbot/v1', '/diary', [
         'methods'  => WP_REST_Server::READABLE,
         'callback' => 'dottorbot_diary_list',
@@ -194,11 +233,73 @@ function dottorbot_rest_chat(WP_REST_Request $request): WP_REST_Response {
         return new WP_REST_Response(['error' => 'Consent required'], 403);
     }
 
+    $limit = dottorbot_get_usage_limit($user_id);
+    $count = dottorbot_get_message_count($user_id);
+    $is_premium = dottorbot_user_is_premium($user_id);
+    $paywall = !$is_premium && $limit > 0 && $count >= $limit;
+
+    $model = $paywall ? 'gpt-5-nano' : get_option('dottorbot_default_model', 'gpt-5');
+
     $message  = (string) $request->get_param('message');
     $scrubbed = dottorbot_scrub_pii($message);
     dottorbot_log_event($user_id, 'chat', $scrubbed);
+    dottorbot_increment_message_count($user_id);
 
-    return new WP_REST_Response(['message' => 'Chat endpoint placeholder'], 200);
+    $response = [
+        'message' => 'Chat endpoint placeholder',
+        'model'   => $model,
+        'paywall' => $paywall,
+    ];
+    if ($paywall) {
+        $response['upgrade_url'] = rest_url('dottorbot/v1/stripe/checkout');
+    }
+
+    return new WP_REST_Response($response, 200);
+}
+
+function dottorbot_stripe_checkout(WP_REST_Request $request): WP_REST_Response {
+    $user_id = get_current_user_id();
+    if (!$user_id) {
+        return new WP_REST_Response(['error' => 'Unauthorized'], 401);
+    }
+
+    $secret = get_option('dottorbot_stripe_secret', getenv('STRIPE_SECRET_KEY'));
+    $price  = get_option('dottorbot_stripe_price_id', getenv('STRIPE_PRICE_ID'));
+    if (!$secret || !$price) {
+        return new WP_REST_Response(['error' => 'Stripe not configured'], 500);
+    }
+
+    $success = add_query_arg('dottorbot-stripe', 'success', home_url());
+    $cancel  = add_query_arg('dottorbot-stripe', 'cancel', home_url());
+
+    $body = http_build_query([
+        'mode' => 'subscription',
+        'line_items[0][price]' => $price,
+        'line_items[0][quantity]' => 1,
+        'success_url' => $success,
+        'cancel_url'  => $cancel,
+        'client_reference_id' => $user_id,
+    ]);
+
+    $response = wp_remote_post('https://api.stripe.com/v1/checkout/sessions', [
+        'headers' => [
+            'Authorization' => 'Bearer ' . $secret,
+            'Content-Type'  => 'application/x-www-form-urlencoded',
+        ],
+        'body' => $body,
+    ]);
+
+    if (is_wp_error($response)) {
+        return new WP_REST_Response(['error' => $response->get_error_message()], 500);
+    }
+
+    $data = json_decode(wp_remote_retrieve_body($response), true);
+    $url = $data['url'] ?? '';
+    if (!$url) {
+        return new WP_REST_Response(['error' => 'Stripe error'], 500);
+    }
+
+    return new WP_REST_Response(['url' => $url], 200);
 }
 
 function dottorbot_diary_list(WP_REST_Request $request): WP_REST_Response {
@@ -347,12 +448,18 @@ add_action('admin_init', function () {
     register_setting('dottorbot_options', 'dottorbot_api_key');
     register_setting('dottorbot_options', 'dottorbot_default_model');
     register_setting('dottorbot_options', 'dottorbot_usage_limit');
+    register_setting('dottorbot_options', 'dottorbot_premium_limit');
+    register_setting('dottorbot_options', 'dottorbot_stripe_price_id');
+    register_setting('dottorbot_options', 'dottorbot_stripe_secret');
 
     add_settings_section('dottorbot_main', __('General Settings', 'dottorbot'), '__return_false', 'dottorbot');
 
     add_settings_field('dottorbot_api_key', __('API Key', 'dottorbot'), 'dottorbot_render_api_key_field', 'dottorbot', 'dottorbot_main');
     add_settings_field('dottorbot_default_model', __('Default Model', 'dottorbot'), 'dottorbot_render_default_model_field', 'dottorbot', 'dottorbot_main');
     add_settings_field('dottorbot_usage_limit', __('Usage Limit', 'dottorbot'), 'dottorbot_render_usage_limit_field', 'dottorbot', 'dottorbot_main');
+    add_settings_field('dottorbot_premium_limit', __('Premium Usage Limit', 'dottorbot'), 'dottorbot_render_premium_limit_field', 'dottorbot', 'dottorbot_main');
+    add_settings_field('dottorbot_stripe_price_id', __('Stripe Price ID', 'dottorbot'), 'dottorbot_render_stripe_price_id_field', 'dottorbot', 'dottorbot_main');
+    add_settings_field('dottorbot_stripe_secret', __('Stripe Secret Key', 'dottorbot'), 'dottorbot_render_stripe_secret_field', 'dottorbot', 'dottorbot_main');
 });
 
 function dottorbot_render_settings_page(): void {
@@ -386,5 +493,20 @@ function dottorbot_render_default_model_field(): void {
 function dottorbot_render_usage_limit_field(): void {
     $value = get_option('dottorbot_usage_limit', '');
     echo '<input type="number" name="dottorbot_usage_limit" value="' . esc_attr($value) . '" class="regular-text" />';
+}
+
+function dottorbot_render_premium_limit_field(): void {
+    $value = get_option('dottorbot_premium_limit', '');
+    echo '<input type="number" name="dottorbot_premium_limit" value="' . esc_attr($value) . '" class="regular-text" />';
+}
+
+function dottorbot_render_stripe_price_id_field(): void {
+    $value = get_option('dottorbot_stripe_price_id', '');
+    echo '<input type="text" name="dottorbot_stripe_price_id" value="' . esc_attr($value) . '" class="regular-text" />';
+}
+
+function dottorbot_render_stripe_secret_field(): void {
+    $value = get_option('dottorbot_stripe_secret', '');
+    echo '<input type="text" name="dottorbot_stripe_secret" value="' . esc_attr($value) . '" class="regular-text" />';
 }
 
