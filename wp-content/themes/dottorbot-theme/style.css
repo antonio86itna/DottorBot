@@ -9,3 +9,93 @@ Text Domain: dottorbot
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Accessible chat styles */
+.db-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.db-messages {
+  padding: 1rem;
+  height: 18rem;
+  overflow-y: auto;
+  background: #ffffff;
+  color: #111827;
+}
+
+.db-input {
+  border: 1px solid #6b7280;
+  padding: 0.5rem;
+  flex: 1;
+  min-height: 44px;
+}
+
+.db-send {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.25rem;
+  padding: 0 1rem;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.db-send:focus,
+.db-input:focus,
+.db-modal button:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.db-user,
+.db-bot {
+  margin: 0.25rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+}
+
+.db-user {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.db-bot {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.db-paywall {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.db-modal {
+  background: #ffffff;
+  color: #111827;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  max-width: 90%;
+}
+
+.db-modal button {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.25rem;
+  padding: 0.5rem 1rem;
+  margin-top: 0.5rem;
+  margin-right: 0.5rem;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.reduced-motion * {
+  animation: none !important;
+  transition: none !important;
+}
+
