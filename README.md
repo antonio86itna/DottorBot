@@ -11,6 +11,7 @@ Assistente AI **informativo** per la salute. Chat, diario, suggerimenti prudenti
 ## Architettura (alto livello)
 - **Tema WordPress**: UI Tailwind, blocco/shortcode chat, pagine legali, i18n, accessibilità.
 - **Plugin WordPress**: orchestrazione AI, REST API, consensi, storage cifrato, export/cancellazione, abbonamenti.
+- **PWA**: manifest + service worker con cache offline e push giornalieri per il diario.
 
 ### Modelli & provider
 - **Default**: OpenAI *GPT‑5 nano* (rapido/low‑cost).  
@@ -48,8 +49,7 @@ Assistente AI **informativo** per la salute. Chat, diario, suggerimenti prudenti
 - Test con tastiera e screen reader.
 
 ## Roadmap
-- PWA + push.  
-- Wearables (passerelle dati) in sola lettura.  
+- Wearables (passerelle dati) in sola lettura.
 - A/B test per onboarding e paywall.  
 - Evals di qualità e allineamento medico‑informativo.
 
