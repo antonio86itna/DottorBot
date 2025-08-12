@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DottorBot - Il tuo assistente medico AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .chat-scrollbar::-webkit-scrollbar { width: 6px; }
+        .chat-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+        .chat-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        .chat-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        #history-panel { transition: transform 0.3s ease-in-out; }
+        .feedback-btn.selected-up { color: #22c55e; }
+        .feedback-btn.selected-down { color: #ef4444; }
+        .plan-card { border: 1px solid #334155; }
+        .plan-card.active { border-color: #06b6d4; box-shadow: 0 0 15px rgba(6, 182, 212, 0.3); }
+    </style>
+</head>
+<body class="bg-slate-900 text-white flex flex-col h-screen antialiased overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-slate-800/50 backdrop-blur-sm border-b border-slate-700 p-4 flex justify-between items-center shadow-lg sticky top-0 z-30">
+        <div class="flex items-center gap-3">
+            <svg class="w-8 h-8 text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" /></svg>
+            <h1 class="text-xl font-bold text-white">DottorBot</h1>
+        </div>
+        <div id="user-controls" class="hidden items-center gap-4">
+            <button id="subscription-toggle-btn" title="Gestisci Abbonamento">
+                <svg class="w-6 h-6 text-yellow-400 hover:text-yellow-300 transition" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.287 8.287 0 0 0 3.962-2.558 8.287 8.287 0 0 0-1.599-4.435Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V21M6.038 7.048A8.25 8.25 0 0 0 9 9.601a8.287 8.287 0 0 0 3.962-2.558 8.287 8.287 0 0 0-1.599-4.435M15.362 5.214A8.252 8.252 0 0 0 12 21 8.25 8.25 0 0 0 6.038 7.047M15.362 5.214A8.25 8.25 0 0 1 18 9.601a8.287 8.287 0 0 1-3.962 2.558 8.287 8.287 0 0 1 1.599 4.435" /></svg>
+            </button>
+            <button id="privacy-toggle-btn" title="Impostazioni Privacy"><svg class="w-6 h-6 text-slate-400 hover:text-white transition" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.43.992a6.759 6.759 0 0 1 0 1.905c.008.379.137.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.333.183-.582.495-.644.869l-.213 1.28c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.063-.374-.313-.686-.645-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.075-.124l-1.217.456a1.125 1.125 0 0 1-1.37-.49l-1.296-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.759 6.759 0 0 1 0-1.905c-.008-.379-.137-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.49l1.217.456c.355.133.75.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg></button>
+            <button id="journal-toggle-btn" title="Diario della Salute"><svg class="w-6 h-6 text-slate-400 hover:text-white transition" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" /></svg></button>
+            <button id="history-toggle-btn" title="Cronologia Chat"><svg class="w-6 h-6 text-slate-400 hover:text-white transition" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg></button>
+            <span id="username-display" class="font-medium"></span>
+            <button id="logout-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Esci</button>
+        </div>
+        <button id="login-register-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg">Accedi / Registrati</button>
+    </header>
+    
+    <div class="flex flex-1 overflow-hidden">
+        <div class="flex-1 flex flex-col">
+            <main id="chat-container" class="flex-1 p-4 md:p-6 overflow-y-auto chat-scrollbar"><div id="chat-messages" class="max-w-4xl mx-auto w-full flex flex-col gap-4"></div></main>
+            <footer class="bg-slate-800/50 backdrop-blur-sm border-t border-slate-700 p-4 sticky bottom-0 z-20">
+                <div class="max-w-4xl mx-auto">
+                    <div id="symptom-checker" class="hidden bg-slate-700 p-4 rounded-lg mb-3 fade-in"><p id="symptom-prompt" class="text-center font-medium mb-3"></p><div id="symptom-buttons" class="flex flex-wrap gap-2 justify-center"></div></div>
+                    <form id="chat-form" class="flex items-center gap-3">
+                        <button type="button" id="symptom-checker-btn" class="bg-slate-600 hover:bg-slate-500 text-white rounded-lg p-3 disabled:opacity-50" disabled><svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg></button>
+                        <input type="text" id="chat-input" placeholder="Accedi per iniziare a chattare..." class="flex-1 bg-slate-700 border border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500 disabled:opacity-50" disabled>
+                        <button type="submit" id="send-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg p-3 disabled:bg-slate-600" disabled><svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" /></svg></button>
+                    </form>
+                    <p id="message-counter" class="text-xs text-slate-400 mt-2 text-center"></p>
+                    <p class="text-xs text-slate-500 mt-2 text-center"><strong>Disclaimer:</strong> DottorBot è un assistente AI e non sostituisce un parere medico.</p>
+                </div>
+            </footer>
+        </div>
+        <aside id="history-panel" class="w-80 bg-slate-800 border-l border-slate-700 flex-col transform translate-x-full h-full hidden lg:flex">
+            <div class="p-4 border-b border-slate-700"><h2 class="text-lg font-bold">Cronologia Chat</h2></div>
+            <div id="history-list" class="flex-1 overflow-y-auto chat-scrollbar p-2"></div>
+        </aside>
+    </div>
+
+    <!-- Modals -->
+    <div id="disclaimer-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 fade-in"><div class="bg-slate-800 rounded-xl p-8 max-w-2xl w-full shadow-2xl border border-slate-700"><h2 class="text-2xl font-bold text-cyan-400 mb-4">Avviso Importante</h2><div class="text-slate-300 space-y-4 text-sm"><p>Benvenuto in DottorBot. Prima di procedere, è fondamentale che tu comprenda e accetti quanto segue:</p><ul class="list-disc list-inside space-y-2 bg-slate-900 p-4 rounded-lg"><li><strong>NON È UN MEDICO:</strong> DottorBot è un'IA, non un professionista sanitario.</li><li><strong>SCOPO INFORMATIVO:</strong> Le informazioni sono a scopo puramente informativo.</li><li><strong>NON SOSTITUISCE IL PARERE MEDICO:</strong> Consulta sempre un medico qualificato.</li><li><strong>EMERGENZE:</strong> In caso di emergenza, chiama il 112.</li></ul><p>Cliccando su "Accetto e Continuo", dichiari di aver letto, compreso e accettato questi termini.</p></div><button id="accept-disclaimer-btn" class="mt-6 w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg text-lg">Accetto e Continuo</button></div></div>
+    <div id="login-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-40 p-4 fade-in"><div class="bg-slate-800 rounded-xl p-8 max-w-md w-full shadow-2xl border border-slate-700 relative"><button id="close-login-modal" class="absolute top-4 right-4 text-slate-400 hover:text-white text-2xl">&times;</button><h2 class="text-2xl font-bold text-center mb-6">Accedi a DottorBot</h2><form id="login-form"><div class="space-y-4"><input type="text" placeholder="Nome utente (es. Mario)" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500" required><input type="password" placeholder="Password (qualsiasi)" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500" required></div><div class="mt-4 flex items-center"><input type="checkbox" id="history-consent" class="h-4 w-4 bg-slate-700 border-slate-600 text-cyan-600 focus:ring-cyan-500 rounded"><label for="history-consent" class="ml-2 block text-sm text-slate-300">Acconsento a salvare i dati sul mio dispositivo.</label></div><button type="submit" class="mt-6 w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg">Accedi</button><p class="text-xs text-slate-400 mt-4 text-center">Questo è un prototipo. Puoi inserire qualsiasi dato.</p></form></div></div>
+    <div id="subscription-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 fade-in"><div class="bg-slate-800 rounded-xl p-8 max-w-3xl w-full shadow-2xl border border-slate-700"><div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-bold text-cyan-400">Gestisci Abbonamento</h2><button id="close-subscription-modal" class="text-slate-400 hover:text-white text-2xl">&times;</button></div><div class="grid md:grid-cols-2 gap-6"><div id="free-plan-card" class="plan-card bg-slate-800/50 p-6 rounded-lg flex flex-col"><h3 class="text-xl font-bold text-white">DottorBot Free</h3><p class="text-slate-400 mb-4">Il piano base per tutti</p><p class="text-3xl font-bold mb-6">€0<span class="text-base font-normal text-slate-400">/mese</span></p><ul class="space-y-2 text-slate-300 flex-1"><li><span class="text-green-400 mr-2">✓</span>3 messaggi al giorno</li><li><span class="text-green-400 mr-2">✓</span>Symptom Checker base</li><li><span class="text-green-400 mr-2">✓</span>Salvataggio dati sul dispositivo</li></ul><button id="free-plan-btn" class="mt-6 w-full bg-slate-600 text-white font-bold py-2 px-4 rounded-lg cursor-not-allowed" disabled>Il tuo piano attuale</button></div><div id="premium-plan-card" class="plan-card bg-slate-800/50 p-6 rounded-lg flex flex-col"><h3 class="text-xl font-bold text-yellow-400">DottorBot Premium</h3><p class="text-slate-400 mb-4">Potenzia la tua esperienza</p><p class="text-3xl font-bold mb-6">€9.99<span class="text-base font-normal text-slate-400">/mese</span></p><ul class="space-y-2 text-slate-300 flex-1"><li><span class="text-yellow-400 mr-2">✓</span>Messaggi illimitati</li><li><span class="text-yellow-400 mr-2">✓</span>Analisi del diario con AI</li><li><span class="text-yellow-400 mr-2">✓</span>Risposte più rapide</li><li><span class="text-yellow-400 mr-2">✓</span>Tutte le funzioni Free</li></ul><button id="premium-plan-btn" class="mt-6 w-full bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-bold py-2 px-4 rounded-lg">Passa a Premium</button></div></div></div></div>
+    <div id="journal-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-40 p-4 fade-in"><div class="bg-slate-800 rounded-xl p-8 max-w-2xl w-full shadow-2xl border border-slate-700 flex flex-col max-h-[90vh]"><div class="flex justify-between items-center mb-4"><h2 class="text-2xl font-bold text-cyan-400">Diario della Salute</h2><button id="close-journal-modal" class="text-slate-400 hover:text-white text-2xl">&times;</button></div><div class="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden"><div class="w-full md:w-1/2 flex flex-col"><h3 class="font-semibold mb-3">Nuova Voce del Diario</h3><form id="journal-form" class="flex flex-col gap-4"><p>Come ti senti oggi?</p><div id="mood-selector" class="flex gap-3 text-2xl cursor-pointer"><span>😊</span><span>🙂</span><span>😐</span><span>😕</span><span>😞</span></div><input type="hidden" id="selected-mood"><textarea id="journal-notes" rows="4" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-cyan-500" placeholder="Aggiungi note su sintomi, alimentazione..."></textarea><button type="submit" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg">Salva Voce</button></form></div><div class="w-full md:w-1/2 flex flex-col"><div class="flex justify-between items-center mb-3"><h3 class="font-semibold">Le tue Voci</h3><button id="analyze-journal-btn" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1 px-2 rounded-lg disabled:opacity-50" title="Funzione Premium: analizza le tue ultime voci">Analizza con AI</button></div><div id="journal-entries" class="flex-1 overflow-y-auto chat-scrollbar bg-slate-900 p-2 rounded-lg space-y-3"></div></div></div></div></div>
+    <div id="privacy-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-40 p-4 fade-in"><div class="bg-slate-800 rounded-xl p-8 max-w-md w-full shadow-2xl border border-slate-700"><div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-bold text-cyan-400">Privacy e Dati</h2><button id="close-privacy-modal" class="text-slate-400 hover:text-white text-2xl">&times;</button></div><div class="space-y-4 text-slate-300"><p>Qui puoi gestire i tuoi dati e consultare i nostri documenti legali.</p><div class="space-y-2"><a href="#" class="block text-cyan-400 hover:underline">Leggi la Privacy Policy</a><a href="#" class="block text-cyan-400 hover:underline">Leggi i Termini di Servizio</a></div><button id="delete-data-btn" class="mt-4 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Cancella tutti i miei dati</button><p class="text-xs text-slate-500 mt-2">Azione irreversibile. Tutti i dati di chat e diario salvati su questo dispositivo verranno eliminati.</p></div></div></div>
+    <div id="confirm-delete-modal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4 fade-in"><div class="bg-slate-800 rounded-xl p-8 max-w-md w-full shadow-2xl border border-red-500"><h2 class="text-xl font-bold text-red-500 mb-4">Sei sicuro?</h2><p class="text-slate-300 mb-6">Stai per cancellare permanentemente tutta la cronologia e le voci del diario associate a questo account. Vuoi procedere?</p><div class="flex justify-end gap-4"><button id="cancel-delete-btn" class="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-lg">Annulla</button><button id="confirm-delete-action-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Sì, cancella</button></div></div></div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM ELEMENTS ---
+        const dom = {
+            disclaimerModal: document.getElementById('disclaimer-modal'),
+            acceptDisclaimerBtn: document.getElementById('accept-disclaimer-btn'),
+            loginRegisterBtn: document.getElementById('login-register-btn'),
+            loginModal: document.getElementById('login-modal'),
+            closeLoginModalBtn: document.getElementById('close-login-modal'),
+            loginForm: document.getElementById('login-form'),
+            historyConsentCheckbox: document.getElementById('history-consent'),
+            userControls: document.getElementById('user-controls'),
+            usernameDisplay: document.getElementById('username-display'),
+            logoutBtn: document.getElementById('logout-btn'),
+            chatContainer: document.getElementById('chat-container'),
+            chatMessages: document.getElementById('chat-messages'),
+            chatForm: document.getElementById('chat-form'),
+            chatInput: document.getElementById('chat-input'),
+            sendBtn: document.getElementById('send-btn'),
+            messageCounter: document.getElementById('message-counter'),
+            subscriptionToggleBtn: document.getElementById('subscription-toggle-btn'),
+            subscriptionModal: document.getElementById('subscription-modal'),
+            closeSubscriptionModalBtn: document.getElementById('close-subscription-modal'),
+            freePlanCard: document.getElementById('free-plan-card'),
+            premiumPlanCard: document.getElementById('premium-plan-card'),
+            freePlanBtn: document.getElementById('free-plan-btn'),
+            premiumPlanBtn: document.getElementById('premium-plan-btn'),
+            historyPanel: document.getElementById('history-panel'),
+            historyToggleBtn: document.getElementById('history-toggle-btn'),
+            historyList: document.getElementById('history-list'),
+            symptomCheckerBtn: document.getElementById('symptom-checker-btn'),
+            symptomCheckerUI: document.getElementById('symptom-checker'),
+            symptomPrompt: document.getElementById('symptom-prompt'),
+            symptomButtons: document.getElementById('symptom-buttons'),
+            journalToggleBtn: document.getElementById('journal-toggle-btn'),
+            journalModal: document.getElementById('journal-modal'),
+            closeJournalModalBtn: document.getElementById('close-journal-modal'),
+            journalForm: document.getElementById('journal-form'),
+            moodSelector: document.getElementById('mood-selector'),
+            selectedMoodInput: document.getElementById('selected-mood'),
+            journalNotes: document.getElementById('journal-notes'),
+            journalEntriesContainer: document.getElementById('journal-entries'),
+            analyzeJournalBtn: document.getElementById('analyze-journal-btn'),
+            privacyToggleBtn: document.getElementById('privacy-toggle-btn'),
+            privacyModal: document.getElementById('privacy-modal'),
+            closePrivacyModalBtn: document.getElementById('close-privacy-modal'),
+            deleteDataBtn: document.getElementById('delete-data-btn'),
+            confirmDeleteModal: document.getElementById('confirm-delete-modal'),
+            cancelDeleteBtn: document.getElementById('cancel-delete-btn'),
+            confirmDeleteActionBtn: document.getElementById('confirm-delete-action-btn'),
+        };
+
+        // --- APP STATE ---
+        let state = {
+            isLoggedIn: false,
+            username: '',
+            subscription: 'free', // 'free' or 'premium'
+            freeMessagesRemaining: 3,
+            chatHistory: [],
+            healthJournal: [],
+            isWaitingForResponse: false,
+            consentToStoreHistory: false,
+            symptomCheckerStep: 0,
+            selectedSymptoms: [],
+        };
+        const MAX_FREE_MESSAGES = 3;
+        const symptomsData = { 'Testa': ['Mal di testa', 'Vertigini', 'Nausea'], 'Torace': ['Tosse', 'Respiro corto', 'Palpitazioni'], 'Addome': ['Mal di pancia', 'Gonfiore', 'Diarrea'], 'Pelle': ['Eruzione cutanea', 'Prurito', 'Arrossamento'], 'Generale': ['Febbre', 'Stanchezza', 'Dolori muscolari'] };
+
+        // --- UI MANAGEMENT ---
+        const updateUI = () => {
+            const { isLoggedIn, subscription, freeMessagesRemaining, isWaitingForResponse } = state;
+            dom.loginRegisterBtn.classList.toggle('hidden', isLoggedIn);
+            dom.userControls.classList.toggle('hidden', !isLoggedIn);
+            dom.userControls.classList.toggle('flex', isLoggedIn);
+            if (isLoggedIn) {
+                dom.usernameDisplay.textContent = state.username;
+                dom.symptomCheckerBtn.disabled = false;
+                const canChat = subscription === 'premium' || freeMessagesRemaining > 0;
+                dom.chatInput.disabled = !canChat;
+                dom.sendBtn.disabled = !canChat;
+                dom.chatInput.placeholder = canChat ? 'Scrivi qui o usa il checker...' : 'Messaggi gratuiti esauriti.';
+                dom.messageCounter.textContent = subscription === 'premium' ? 'Abbonamento Premium attivo' : (canChat ? `Hai ${freeMessagesRemaining} messaggi gratuiti.` : 'Passa a premium per messaggi illimitati.');
+                if (!canChat && !isWaitingForResponse) dom.subscriptionModal.classList.remove('hidden');
+                dom.analyzeJournalBtn.disabled = subscription !== 'premium';
+            } else {
+                ['chatInput', 'sendBtn', 'symptomCheckerBtn'].forEach(key => dom[key].disabled = true);
+                dom.chatInput.placeholder = 'Accedi per iniziare a chattare...';
+                dom.messageCounter.textContent = '';
+                dom.historyPanel.classList.add('translate-x-full', 'hidden');
+            }
+            updateSubscriptionModal();
+            renderHistoryList();
+            renderJournalEntries();
+        };
+        
+        const updateSubscriptionModal = () => {
+            const { subscription } = state;
+            if (subscription === 'free') {
+                dom.freePlanCard.classList.add('active');
+                dom.premiumPlanCard.classList.remove('active');
+                dom.freePlanBtn.textContent = 'Il tuo piano attuale';
+                dom.freePlanBtn.disabled = true;
+                dom.premiumPlanBtn.textContent = 'Passa a Premium';
+                dom.premiumPlanBtn.onclick = () => handleSubscriptionChange('premium');
+            } else { // premium
+                dom.freePlanCard.classList.remove('active');
+                dom.premiumPlanCard.classList.add('active');
+                dom.premiumPlanBtn.textContent = 'Il tuo piano attuale';
+                dom.premiumPlanBtn.disabled = true;
+                dom.freePlanBtn.textContent = 'Gestisci (Downgrade a Free)';
+                dom.freePlanBtn.disabled = false;
+                dom.freePlanBtn.onclick = () => handleSubscriptionChange('free');
+            }
+        };
+
+        const addMessageToChat = (sender, text, skipHistorySave = false) => {
+            const messageWrapper = document.createElement('div');
+            messageWrapper.classList.add('w-full', 'flex', 'flex-col', 'fade-in');
+            const messageEl = document.createElement('div');
+            messageEl.classList.add('p-3', 'rounded-xl', 'max-w-xl', 'text-sm', 'md:text-base');
+            let content = text;
+            if (sender === 'user') {
+                messageWrapper.classList.add('items-end');
+                messageEl.classList.add('bg-cyan-600', 'text-white');
+            } else {
+                messageWrapper.classList.add('items-start');
+                messageEl.classList.add(sender === 'bot' ? 'bg-slate-700' : 'bg-slate-700', 'text-slate-200');
+                if (sender === 'loading' || sender === 'error') messageEl.classList.add('italic', 'text-slate-400');
+                if (sender === 'bot') content = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>').replace(/Fonte: (.*)/g, '<em class="text-xs text-slate-400 block mt-2">Fonte: $1</em>');
+                if (sender === 'loading') messageEl.id = 'loading-indicator';
+            }
+            messageEl.innerHTML = content;
+            messageWrapper.appendChild(messageEl);
+            if (sender === 'bot') {
+                const feedbackContainer = document.createElement('div');
+                feedbackContainer.className = 'flex gap-3 mt-2 text-xs';
+                feedbackContainer.innerHTML = `<button class="feedback-btn" data-feedback="up" title="Utile">👍</button><button class="feedback-btn" data-feedback="down" title="Non utile">👎</button>`;
+                messageWrapper.appendChild(feedbackContainer);
+                feedbackContainer.querySelectorAll('.feedback-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                    const parent = e.currentTarget.parentElement;
+                    parent.querySelectorAll('.feedback-btn').forEach(b => b.classList.remove('selected-up', 'selected-down'));
+                    e.currentTarget.classList.add(e.currentTarget.dataset.feedback === 'up' ? 'selected-up' : 'selected-down');
+                    parent.style.pointerEvents = 'none';
+                }));
+            }
+            dom.chatMessages.appendChild(messageWrapper);
+            dom.chatContainer.scrollTop = dom.chatContainer.scrollHeight;
+            if (!skipHistorySave && sender !== 'loading' && sender !== 'error') {
+                const role = sender === 'user' ? 'user' : 'model';
+                state.chatHistory.push({ role, parts: [{ text }] });
+                saveHistory();
+            }
+        };
+
+        // --- DATA MANAGEMENT ---
+        const saveData = (key, data) => {
+            if (state.consentToStoreHistory && state.username) localStorage.setItem(`dottorbot_${key}_${state.username}`, JSON.stringify(data));
+        };
+        const loadData = (key, defaultValue = []) => {
+            if (state.consentToStoreHistory && state.username) {
+                const storedData = localStorage.getItem(`dottorbot_${key}_${state.username}`);
+                return storedData ? JSON.parse(storedData) : defaultValue;
+            }
+            return defaultValue;
+        };
+        const deleteUserData = () => {
+            if (state.username) {
+                localStorage.removeItem(`dottorbot_history_${state.username}`);
+                localStorage.removeItem(`dottorbot_journal_${state.username}`);
+                localStorage.removeItem(`dottorbot_subscription_${state.username}`);
+            }
+        };
+
+        const saveHistory = () => { saveData('history', state.chatHistory); renderHistoryList(); };
+        const saveJournal = () => saveData('journal', state.healthJournal);
+        const saveSubscription = () => saveData('subscription', state.subscription);
+
+        const loadSessionData = () => {
+            state.chatHistory = loadData('history');
+            state.healthJournal = loadData('journal');
+            state.subscription = loadData('subscription', 'free');
+            dom.chatMessages.innerHTML = '';
+            state.chatHistory.forEach(msg => addMessageToChat(msg.role === 'user' ? 'user' : 'bot', msg.parts[0].text, true));
+            renderHistoryList();
+            renderJournalEntries();
+        };
+
+        const renderHistoryList = () => {
+            const { isLoggedIn, consentToStoreHistory, chatHistory } = state;
+            if (!isLoggedIn || !consentToStoreHistory) {
+                dom.historyList.innerHTML = '<p class="text-slate-400 text-sm p-4 text-center">Cronologia disattivata.</p>';
+                return;
+            }
+            dom.historyList.innerHTML = chatHistory.length === 0 ? '<p class="text-slate-400 text-sm p-4 text-center">Nessuna chat salvata.</p>' : '';
+            [...chatHistory].filter(m => m.role === 'user').reverse().forEach(msg => {
+                const item = document.createElement('div');
+                item.className = 'p-2 my-1 bg-slate-700/50 hover:bg-slate-700 rounded-md cursor-pointer text-sm truncate';
+                item.textContent = msg.parts[0].text;
+                dom.historyList.appendChild(item);
+            });
+        };
+
+        const renderJournalEntries = () => {
+            const { isLoggedIn, consentToStoreHistory, healthJournal } = state;
+            if (!isLoggedIn || !consentToStoreHistory) {
+                dom.journalEntriesContainer.innerHTML = '<p class="text-slate-400 text-sm p-4 text-center">Diario disattivato.</p>';
+                dom.analyzeJournalBtn.disabled = true;
+                return;
+            }
+            dom.journalEntriesContainer.innerHTML = healthJournal.length === 0 ? '<p class="text-slate-400 text-sm p-2 text-center">Nessuna voce nel diario.</p>' : '';
+            [...healthJournal].reverse().forEach(entry => {
+                const item = document.createElement('div');
+                item.className = 'bg-slate-800 p-3 rounded-lg';
+                item.innerHTML = `<div class="flex justify-between items-center text-xs text-slate-400 mb-1"><span>${new Date(entry.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</span><span class="text-xl">${entry.mood}</span></div><p class="text-sm text-slate-200">${entry.notes.replace(/\n/g, '<br>')}</p>`;
+                dom.journalEntriesContainer.appendChild(item);
+            });
+            dom.analyzeJournalBtn.disabled = state.subscription !== 'premium' || healthJournal.length < 2;
+        };
+        
+        // --- SYMPTOM CHECKER ---
+        const startSymptomChecker = () => {
+            dom.symptomCheckerUI.classList.remove('hidden');
+            state.symptomCheckerStep = 1;
+            dom.symptomPrompt.textContent = 'In quale area del corpo avverti il disturbo?';
+            dom.symptomButtons.innerHTML = '';
+            Object.keys(symptomsData).forEach(area => {
+                const button = document.createElement('button');
+                button.textContent = area;
+                button.className = 'bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-4 rounded-lg transition';
+                button.onclick = () => selectBodyArea(area);
+                dom.symptomButtons.appendChild(button);
+            });
+        };
+        const selectBodyArea = (area) => {
+            state.symptomCheckerStep = 2;
+            state.selectedSymptoms = [];
+            dom.symptomPrompt.textContent = `Seleziona i sintomi relativi a: ${area} (puoi sceglierne più di uno)`;
+            dom.symptomButtons.innerHTML = '';
+            symptomsData[area].forEach(symptom => {
+                const button = document.createElement('button');
+                button.textContent = symptom;
+                button.className = 'bg-slate-600 hover:bg-slate-500 text-white font-medium py-2 px-3 rounded-lg transition text-sm';
+                button.onclick = () => toggleSymptom(symptom, button);
+                dom.symptomButtons.appendChild(button);
+            });
+            const confirmButton = document.createElement('button');
+            confirmButton.textContent = 'Conferma e Invia';
+            confirmButton.className = 'w-full mt-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg transition';
+            confirmButton.onclick = confirmSymptoms;
+            dom.symptomButtons.appendChild(confirmButton);
+        };
+        const toggleSymptom = (symptom, button) => {
+            const index = state.selectedSymptoms.indexOf(symptom);
+            if (index > -1) {
+                state.selectedSymptoms.splice(index, 1);
+                button.classList.remove('bg-cyan-600', 'hover:bg-cyan-700');
+                button.classList.add('bg-slate-600', 'hover:bg-slate-500');
+            } else {
+                state.selectedSymptoms.push(symptom);
+                button.classList.add('bg-cyan-600', 'hover:bg-cyan-700');
+                button.classList.remove('bg-slate-600', 'hover:bg-slate-500');
+            }
+        };
+        const confirmSymptoms = () => {
+            if (state.selectedSymptoms.length > 0) {
+                const promptText = `Soffro di: ${state.selectedSymptoms.join(', ')}.`;
+                dom.chatInput.value = promptText;
+                dom.chatForm.dispatchEvent(new Event('submit', { cancelable: true }));
+            }
+            resetSymptomChecker();
+        };
+        const resetSymptomChecker = () => {
+            dom.symptomCheckerUI.classList.add('hidden');
+            state.symptomCheckerStep = 0;
+            state.selectedSymptoms = [];
+        };
+
+        // --- EVENT HANDLERS ---
+        const handleLogin = (e) => {
+            e.preventDefault();
+            const inputUsername = dom.loginForm.querySelector('input[type="text"]').value;
+            if (inputUsername) {
+                state = { ...state, isLoggedIn: true, username: inputUsername, consentToStoreHistory: dom.historyConsentCheckbox.checked };
+                dom.loginModal.classList.add('hidden');
+                addMessageToChat('bot', `Ciao ${state.username}, benvenuto in DottorBot. Come posso aiutarti?`, true);
+                loadSessionData();
+                updateUI();
+            }
+        };
+        const handleLogout = () => {
+            state = { isLoggedIn: false, username: '', subscription: 'free', freeMessagesRemaining: MAX_FREE_MESSAGES, chatHistory: [], healthJournal: [], isWaitingForResponse: false, consentToStoreHistory: false };
+            dom.chatMessages.innerHTML = '';
+            dom.historyConsentCheckbox.checked = false;
+            updateUI();
+        };
+        const handleDeleteAllData = () => {
+            deleteUserData();
+            handleLogout();
+            dom.privacyModal.classList.add('hidden');
+            dom.confirmDeleteModal.classList.add('hidden');
+            alert('Tutti i tuoi dati sono stati cancellati da questo dispositivo.');
+        };
+        const handleChatSubmit = async (e) => {
+            e.preventDefault();
+            const userInput = dom.chatInput.value.trim();
+            if (!userInput || state.isWaitingForResponse || !state.isLoggedIn) return;
+            if (state.subscription === 'free' && state.freeMessagesRemaining <= 0) {
+                dom.subscriptionModal.classList.remove('hidden');
+                return;
+            }
+            addMessageToChat('user', userInput);
+            dom.chatInput.value = '';
+            if (state.subscription === 'free') state.freeMessagesRemaining--;
+            state.isWaitingForResponse = true;
+            updateUI();
+            addMessageToChat('loading', 'DottorBot sta pensando...', true);
+            try {
+                const botResponseText = await getAIResponse(userInput);
+                document.getElementById('loading-indicator')?.remove();
+                addMessageToChat('bot', botResponseText);
+            } catch (error) {
+                console.error("Errore API:", error);
+                document.getElementById('loading-indicator')?.remove();
+                addMessageToChat('error', 'Spiacenti, si è verificato un errore.', true);
+            } finally {
+                state.isWaitingForResponse = false;
+                updateUI();
+            }
+        };
+        const handleJournalSubmit = (e) => {
+            e.preventDefault();
+            const mood = dom.selectedMoodInput.value;
+            const notes = dom.journalNotes.value.trim();
+            if (!mood && !notes) return;
+            state.healthJournal.push({ date: new Date().toISOString(), mood, notes });
+            saveJournal();
+            renderJournalEntries();
+            dom.journalForm.reset();
+            dom.moodSelector.querySelectorAll('span').forEach(s => s.style.transform = 'scale(1)');
+            dom.selectedMoodInput.value = '';
+        };
+        const handleAnalyzeJournal = () => {
+            if (state.subscription !== 'premium') {
+                alert('Questa è una funzione Premium. Effettua l-upgrade per utilizzarla.');
+                dom.subscriptionModal.classList.remove('hidden');
+                return;
+            }
+            dom.journalModal.classList.add('hidden');
+            const entriesToAnalyze = state.healthJournal.slice(-5);
+            let prompt = "Analizza le seguenti voci del mio diario della salute per identificare eventuali pattern o correlazioni generali, senza fare diagnosi. Fornisci spunti, non certezze. Le voci sono:\n\n";
+            entriesToAnalyze.forEach(entry => { prompt += `- Data: ${new Date(entry.date).toLocaleDateString('it-IT')}, Umore: ${entry.mood}, Note: ${entry.notes}\n`; });
+            dom.chatInput.value = prompt;
+            dom.chatForm.dispatchEvent(new Event('submit', { cancelable: true }));
+        };
+        const handleSubscriptionChange = (newPlan) => {
+            state.subscription = newPlan;
+            if (newPlan === 'free') {
+                state.freeMessagesRemaining = MAX_FREE_MESSAGES;
+            }
+            saveSubscription();
+            updateUI();
+            dom.subscriptionModal.classList.add('hidden');
+            alert(`Abbonamento aggiornato a ${newPlan === 'premium' ? 'Premium' : 'Free'}!`);
+        };
+        const getAIResponse = async (prompt) => {
+            const systemPrompt = `Sei "DottorBot", un assistente AI. Il tuo ruolo è di informatore, non di medico. NON FARE MAI UNA DIAGNOSI. Usa sempre un linguaggio ipotetico (es. "potrebbe essere..."). Basa le tue risposte su conoscenze mediche generali e, se opportuno, menziona che le informazioni sono allineate con fonti attendibili come MedlinePlus o l'Istituto Superiore di Sanità. Occasionalmente, puoi aggiungere alla fine di una frase specifica "Fonte: MedlinePlus". ALLA FINE DI OGNI RISPOSTA, includi il disclaimer: "**Disclaimer: Ricorda, sono un'AI e non un medico. Consulta sempre un medico per una diagnosi.**" Se la richiesta sembra un'emergenza, rispondi solo: "Se pensi sia un'emergenza, contatta il 112. Non posso fornire assistenza in emergenze."`;
+            const requestHistory = [{ role: 'user', parts: [{ text: systemPrompt }] }, ...state.chatHistory, {role: 'user', parts: [{text: prompt}]}];
+            const payload = { contents: requestHistory.slice(-10) };
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+            const result = await response.json();
+            if (result.candidates && result.candidates[0]?.content?.parts[0]?.text) {
+                return result.candidates[0].content.parts[0].text;
+            } else {
+                console.warn("Risposta API non valida:", result);
+                return "Non sono riuscito a elaborare una risposta. Prova a riformulare.";
+            }
+        };
+
+        // --- EVENT LISTENERS ---
+        dom.acceptDisclaimerBtn.addEventListener('click', () => dom.disclaimerModal.style.display = 'none');
+        dom.loginRegisterBtn.addEventListener('click', () => dom.loginModal.classList.remove('hidden'));
+        dom.closeLoginModalBtn.addEventListener('click', () => dom.loginModal.classList.add('hidden'));
+        dom.loginForm.addEventListener('submit', handleLogin);
+        dom.logoutBtn.addEventListener('click', handleLogout);
+        dom.chatForm.addEventListener('submit', handleChatSubmit);
+        dom.historyToggleBtn.addEventListener('click', () => { dom.historyPanel.classList.toggle('hidden'); dom.historyPanel.classList.toggle('translate-x-full'); });
+        dom.journalToggleBtn.addEventListener('click', () => dom.journalModal.classList.remove('hidden'));
+        dom.closeJournalModalBtn.addEventListener('click', () => dom.journalModal.classList.add('hidden'));
+        dom.journalForm.addEventListener('submit', handleJournalSubmit);
+        dom.analyzeJournalBtn.addEventListener('click', handleAnalyzeJournal);
+        dom.privacyToggleBtn.addEventListener('click', () => dom.privacyModal.classList.remove('hidden'));
+        dom.closePrivacyModalBtn.addEventListener('click', () => dom.privacyModal.classList.add('hidden'));
+        dom.deleteDataBtn.addEventListener('click', () => dom.confirmDeleteModal.classList.remove('hidden'));
+        dom.cancelDeleteBtn.addEventListener('click', () => dom.confirmDeleteModal.classList.add('hidden'));
+        dom.confirmDeleteActionBtn.addEventListener('click', handleDeleteAllData);
+        dom.subscriptionToggleBtn.addEventListener('click', () => dom.subscriptionModal.classList.remove('hidden'));
+        dom.closeSubscriptionModalBtn.addEventListener('click', () => dom.subscriptionModal.classList.add('hidden'));
+        dom.moodSelector.querySelectorAll('span').forEach(span => {
+            span.addEventListener('click', () => {
+                dom.selectedMoodInput.value = span.textContent;
+                dom.moodSelector.querySelectorAll('span').forEach(s => s.style.transform = 'scale(1)');
+                span.style.transform = 'scale(1.3)';
+            });
+        });
+        dom.symptomCheckerBtn.addEventListener('click', () => { dom.symptomCheckerUI.classList.contains('hidden') ? startSymptomChecker() : resetSymptomChecker(); });
+
+        updateUI();
+    });
+    </script>
+</body>
+</html>
