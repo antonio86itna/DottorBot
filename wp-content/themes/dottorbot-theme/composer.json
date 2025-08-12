@@ -1,0 +1,7 @@
+{
+    "name": "dottorbot/theme",
+    "type": "project",
+    "require": {
+        "minishlink/web-push": "^7"
+    }
+}
