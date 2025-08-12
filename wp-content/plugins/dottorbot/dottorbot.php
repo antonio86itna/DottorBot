@@ -282,10 +282,10 @@ function dottorbot_rest_chat(WP_REST_Request $request): WP_REST_Response {
         return new WP_REST_Response(['error' => 'Consent required'], 403);
     }
 
-    $limit = dottorbot_get_usage_limit($user_id);
-    $count = dottorbot_get_message_count($user_id);
+    $limit      = dottorbot_get_usage_limit($user_id);
+    $count      = dottorbot_get_message_count($user_id);
     $is_premium = dottorbot_user_is_premium($user_id);
-    $paywall = !$is_premium && $limit > 0 && $count >= $limit;
+    $paywall    = !$is_premium && $limit > 0 && $count >= $limit;
 
     $model = $paywall ? 'gpt-5-nano' : get_option('dottorbot_default_model', 'gpt-5');
 
@@ -294,16 +294,58 @@ function dottorbot_rest_chat(WP_REST_Request $request): WP_REST_Response {
     dottorbot_log_event($user_id, 'chat', $scrubbed);
     dottorbot_increment_message_count($user_id);
 
-    $variant = dottorbot_get_ab_variant($user_id);
+    // Assign variant for A/B testing (logged but not returned).
+    dottorbot_get_ab_variant($user_id);
+
+    // Classify the request via internal router endpoint.
+    $router_request = new WP_REST_Request('POST', '/dottorbot/v1/router');
+    $router_request->set_body(wp_json_encode(['question' => $scrubbed]));
+    $router_request->set_header('Content-Type', 'application/json');
+    $router_response = rest_do_request($router_request);
+    $router_data     = $router_response instanceof WP_REST_Response ? $router_response->get_data() : [];
+    $classification  = $router_data['classification'] ?? 'general';
+
+    // Emergency requests return the 112 message immediately.
+    if ($classification === 'emergency') {
+        $msg = $router_data['message'] ?? 'Se pensi sia un\u2019emergenza, contatta il 112.';
+        return new WP_REST_Response([
+            'message' => $msg,
+            'paywall' => $paywall,
+        ], 200);
+    }
+
+    // Prepare payload for the default model.
+    $api_key = getenv('OPENAI_API_KEY');
+    $payload = [
+        'model' => $model,
+        'input' => $scrubbed,
+    ];
+    if ($classification === 'needs_sources' && !empty($router_data['research']['answer'])) {
+        $payload['input'] .= "\n\n" . $router_data['research']['answer'];
+    }
+
+    $answer = '';
+    if ($api_key) {
+        $ai_response = wp_remote_post('https://api.openai.com/v1/responses', [
+            'headers' => [
+                'Content-Type'  => 'application/json',
+                'Authorization' => 'Bearer ' . $api_key,
+            ],
+            'body' => wp_json_encode($payload),
+        ]);
+        if (!is_wp_error($ai_response)) {
+            $data   = json_decode(wp_remote_retrieve_body($ai_response), true);
+            $answer = trim($data['output'][0]['content'][0]['text'] ?? '');
+        }
+    }
 
     $response = [
-        'message' => 'Chat endpoint placeholder',
-        'model'   => $model,
+        'message' => $answer,
         'paywall' => $paywall,
-        'variant' => $variant,
     ];
-    if ($paywall) {
-        $response['upgrade_url'] = rest_url('dottorbot/v1/stripe/checkout');
+
+    if ($classification === 'needs_sources' && !empty($router_data['research']['sources'])) {
+        $response['sources'] = $router_data['research']['sources'];
     }
 
     return new WP_REST_Response($response, 200);
