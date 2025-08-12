@@ -27,6 +27,7 @@ function dottorbot_install(): void {
     $sql_logs = "CREATE TABLE $table_name (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         user_id BIGINT UNSIGNED NOT NULL,
+        hash CHAR(64) NOT NULL,
         action VARCHAR(50) NOT NULL,
         data LONGTEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -128,6 +129,14 @@ function dottorbot_get_usage_limit(int $user_id): int {
 }
 
 /**
+ * Create a salted hash for audit logging.
+ */
+function dottorbot_user_hash(int $user_id, string $action, string $data = ''): string {
+    $salt = wp_salt('dottorbot_log');
+    return hash('sha256', $salt . $user_id . $action . $data);
+}
+
+/**
  * Log events to custom table after scrubbing PII.
  */
 function dottorbot_log_event(int $user_id, string $action, string $data = ''): void {
@@ -137,6 +146,7 @@ function dottorbot_log_event(int $user_id, string $action, string $data = ''): v
         $table,
         [
             'user_id'    => $user_id,
+            'hash'       => dottorbot_user_hash($user_id, $action, $data),
             'action'     => $action,
             'data'       => dottorbot_scrub_pii($data),
             'created_at' => current_time('mysql', 1),
@@ -222,9 +232,7 @@ add_action('rest_api_init', function () {
     register_rest_route('dottorbot/v1', '/purge', [
         'methods'  => 'DELETE',
         'callback' => 'dottorbot_rest_purge',
-        'permission_callback' => function () {
-            return current_user_can('manage_options');
-        },
+        'permission_callback' => '__return_true',
     ]);
 
     register_rest_route('dottorbot/v1', '/consent', [
@@ -424,8 +432,18 @@ function dottorbot_rest_export(WP_REST_Request $request): WP_REST_Response {
 
 function dottorbot_rest_purge(WP_REST_Request $request): WP_REST_Response {
     $user_id = get_current_user_id();
+    if (!$user_id) {
+        return new WP_REST_Response(['error' => 'Unauthorized'], 401);
+    }
+
+    global $wpdb;
+    $wpdb->delete(dottorbot_diary_table(), ['user_id' => $user_id]);
+    delete_user_meta($user_id, 'dottorbot_message_count');
+    delete_user_meta($user_id, 'dottorbot_weekly_notes');
+    delete_user_meta($user_id, 'dottorbot_consent');
+
     dottorbot_log_event($user_id, 'purge');
-    return new WP_REST_Response(['message' => 'Purge endpoint placeholder'], 200);
+    return new WP_REST_Response(['purged' => true], 200);
 }
 
 function dottorbot_rest_consent(WP_REST_Request $request): WP_REST_Response {
