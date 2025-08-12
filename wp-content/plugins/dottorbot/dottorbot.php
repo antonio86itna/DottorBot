@@ -207,12 +207,26 @@ function dottorbot_diary_decrypt(string $data): ?array {
     return $json ? json_decode($json, true) : null;
 }
 
+/**
+ * Basic permission check for DottorBot REST endpoints.
+ */
+function dottorbot_rest_permission_check(WP_REST_Request $request): bool {
+    if (!is_user_logged_in()) {
+        return false;
+    }
+    $nonce = $request->get_header('X-WP-Nonce');
+    if (!$nonce || !wp_verify_nonce($nonce, 'wp_rest')) {
+        return false;
+    }
+    return current_user_can('read');
+}
+
 // Register REST API routes.
 add_action('rest_api_init', function () {
     register_rest_route('dottorbot/v1', '/chat', [
         'methods'  => 'POST',
         'callback' => 'dottorbot_rest_chat',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'dottorbot_rest_permission_check',
     ]);
 
     register_rest_route('dottorbot/v1', '/stripe/checkout', [
@@ -226,31 +240,31 @@ add_action('rest_api_init', function () {
     register_rest_route('dottorbot/v1', '/event', [
         'methods'  => 'POST',
         'callback' => 'dottorbot_rest_event',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'dottorbot_rest_permission_check',
     ]);
 
     register_rest_route('dottorbot/v1', '/diary', [
         'methods'  => WP_REST_Server::READABLE,
         'callback' => 'dottorbot_diary_list',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'dottorbot_rest_permission_check',
     ]);
 
     register_rest_route('dottorbot/v1', '/diary', [
         'methods'  => WP_REST_Server::CREATABLE,
         'callback' => 'dottorbot_diary_create',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'dottorbot_rest_permission_check',
     ]);
 
     register_rest_route('dottorbot/v1', '/diary/(?P<id>\d+)', [
         'methods'  => WP_REST_Server::EDITABLE,
         'callback' => 'dottorbot_diary_update',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'dottorbot_rest_permission_check',
     ]);
 
     register_rest_route('dottorbot/v1', '/diary/(?P<id>\d+)', [
         'methods'  => WP_REST_Server::DELETABLE,
         'callback' => 'dottorbot_diary_delete',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'dottorbot_rest_permission_check',
     ]);
 
     register_rest_route('dottorbot/v1', '/export', [
@@ -272,7 +286,7 @@ add_action('rest_api_init', function () {
     register_rest_route('dottorbot/v1', '/consent', [
         'methods'  => 'POST',
         'callback' => 'dottorbot_rest_consent',
-        'permission_callback' => '__return_true',
+        'permission_callback' => 'dottorbot_rest_permission_check',
     ]);
 });
 

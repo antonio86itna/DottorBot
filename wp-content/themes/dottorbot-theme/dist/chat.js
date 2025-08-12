@@ -53,7 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch('/wp-json/dottorbot/v1/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': dottorbotChat.nonce },
         body: JSON.stringify({ message: text })
       });
       const data = await res.json();
@@ -107,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('db-upgrade').addEventListener('click', async () => {
       try {
-        const res = await fetch(url, { method: 'POST' });
+        const res = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'X-WP-Nonce': dottorbotChat.nonce } });
         const data = await res.json();
         if (data.url) {
           window.location.href = data.url;

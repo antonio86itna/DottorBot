@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function () {
   btnContainer.appendChild(btnPdf);
   root.appendChild(btnContainer);
 
-  fetch('/wp-json/dottorbot/v1/diary')
+  fetch('/wp-json/dottorbot/v1/diary', { credentials: 'same-origin', headers: { 'X-WP-Nonce': dottorbotDiary.nonce } })
     .then(r => r.json())
     .then(entries => {
       if (!Array.isArray(entries)) return;
