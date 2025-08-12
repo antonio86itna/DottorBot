@@ -153,7 +153,7 @@ function dottorbot_get_ab_variant(int $user_id): string {
  */
 function dottorbot_user_hash(int $user_id, string $action, string $data = ''): string {
     $salt = wp_salt('dottorbot_log');
-    return hash('sha256', $salt . $user_id . $action . $data);
+    return hash_hmac('sha256', $user_id . $action . $data, $salt);
 }
 
 /**
@@ -254,15 +254,19 @@ add_action('rest_api_init', function () {
     ]);
 
     register_rest_route('dottorbot/v1', '/export', [
-        'methods'  => 'GET',
-        'callback' => 'dottorbot_rest_export',
-        'permission_callback' => '__return_true',
+        'methods'             => 'GET',
+        'callback'            => 'dottorbot_rest_export',
+        'permission_callback' => function () {
+            return is_user_logged_in();
+        },
     ]);
 
     register_rest_route('dottorbot/v1', '/purge', [
-        'methods'  => 'DELETE',
-        'callback' => 'dottorbot_rest_purge',
-        'permission_callback' => '__return_true',
+        'methods'             => 'DELETE',
+        'callback'            => 'dottorbot_rest_purge',
+        'permission_callback' => function () {
+            return is_user_logged_in();
+        },
     ]);
 
     register_rest_route('dottorbot/v1', '/consent', [
@@ -459,8 +463,9 @@ function dottorbot_rest_export(WP_REST_Request $request): WP_REST_Response {
     }
 
     $format  = strtolower((string) $request->get_param('format'));
+    $format  = in_array($format, ['csv', 'json'], true) ? $format : 'json';
     $entries = dottorbot_diary_fetch_all($user_id);
-    dottorbot_log_event($user_id, 'export', $format ?: 'json');
+    dottorbot_log_event($user_id, 'export', $format);
 
     if ('csv' === $format) {
         $fh = fopen('php://temp', 'r+');
@@ -471,10 +476,23 @@ function dottorbot_rest_export(WP_REST_Request $request): WP_REST_Response {
         rewind($fh);
         $csv = stream_get_contents($fh);
         fclose($fh);
-        return new WP_REST_Response($csv, 200, ['Content-Type' => 'text/csv']);
+        return new WP_REST_Response(
+            $csv,
+            200,
+            [
+                'Content-Type'        => 'text/csv',
+                'Content-Disposition' => 'attachment; filename="dottorbot.csv"',
+            ]
+        );
     }
 
-    return new WP_REST_Response($entries, 200);
+    return new WP_REST_Response(
+        $entries,
+        200,
+        [
+            'Content-Disposition' => 'attachment; filename="dottorbot.json"',
+        ]
+    );
 }
 
 function dottorbot_rest_purge(WP_REST_Request $request): WP_REST_Response {
@@ -485,9 +503,12 @@ function dottorbot_rest_purge(WP_REST_Request $request): WP_REST_Response {
 
     global $wpdb;
     $wpdb->delete(dottorbot_diary_table(), ['user_id' => $user_id]);
+    $wpdb->delete($wpdb->prefix . 'dottorbot_logs', ['user_id' => $user_id]);
     delete_user_meta($user_id, 'dottorbot_message_count');
     delete_user_meta($user_id, 'dottorbot_weekly_notes');
     delete_user_meta($user_id, 'dottorbot_consent');
+    delete_user_meta($user_id, 'dottorbot_tone');
+    delete_user_meta($user_id, 'dottorbot_detail');
 
     dottorbot_log_event($user_id, 'purge');
     return new WP_REST_Response(['purged' => true], 200);
@@ -823,4 +844,57 @@ function dottorbot_enqueue_scripts(): void {
     wp_add_inline_script('dottorbot-tracking', $script);
 }
 add_action('wp_enqueue_scripts', 'dottorbot_enqueue_scripts');
+
+/**
+ * Render privacy modal with export/purge actions.
+ */
+function dottorbot_render_privacy_modal(): void {
+    if (!is_user_logged_in()) {
+        return;
+    }
+    ?>
+    <button type="button" id="dottorbot-open-privacy" style="display:none;">
+        <?php echo esc_html__('Privacy', 'dottorbot'); ?>
+    </button>
+    <div id="dottorbot-privacy-modal" style="display:none;">
+        <button type="button" id="dottorbot-export-json"><?php echo esc_html__('Esporta JSON', 'dottorbot'); ?></button>
+        <button type="button" id="dottorbot-export-csv"><?php echo esc_html__('Esporta CSV', 'dottorbot'); ?></button>
+        <button type="button" id="dottorbot-purge"><?php echo esc_html__('Cancella dati', 'dottorbot'); ?></button>
+    </div>
+    <script>
+    (function(){
+        var modal = document.getElementById('dottorbot-privacy-modal');
+        var opener = document.getElementById('dottorbot-open-privacy');
+        if(!modal || !opener) return;
+        opener.style.display = 'block';
+        opener.addEventListener('click', function(){ modal.style.display = 'block'; });
+        var nonce = '<?php echo wp_create_nonce('wp_rest'); ?>';
+        function download(format){
+            fetch('<?php echo esc_url_raw(rest_url('dottorbot/v1/export')); ?>?format='+format, {
+                credentials: 'same-origin',
+                headers: { 'X-WP-Nonce': nonce }
+            }).then(function(r){ return r.blob(); }).then(function(blob){
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'dottorbot.'+format;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+        document.getElementById('dottorbot-export-json').addEventListener('click', function(){ download('json'); });
+        document.getElementById('dottorbot-export-csv').addEventListener('click', function(){ download('csv'); });
+        document.getElementById('dottorbot-purge').addEventListener('click', function(){
+            if(!confirm('<?php echo esc_js(__('Sei sicuro di voler cancellare i tuoi dati?', 'dottorbot')); ?>')) return;
+            fetch('<?php echo esc_url_raw(rest_url('dottorbot/v1/purge')); ?>', {
+                method: 'DELETE',
+                credentials: 'same-origin',
+                headers: { 'X-WP-Nonce': nonce }
+            }).then(function(){ modal.style.display = 'none'; });
+        });
+    })();
+    </script>
+    <?php
+}
+add_action('wp_footer', 'dottorbot_render_privacy_modal');
 
