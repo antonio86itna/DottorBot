@@ -4,10 +4,17 @@
  * Description: Adds REST API endpoints and settings for DottorBot.
  * Version: 1.0.0
  * Author: DottorBot
+ * Text Domain: dottorbot
+ * Domain Path: /languages
  */
 
 if (!defined('ABSPATH')) {
     exit;
+}
+
+add_action('plugins_loaded', 'dottorbot_load_textdomain');
+function dottorbot_load_textdomain(): void {
+    load_plugin_textdomain('dottorbot', false, dirname(plugin_basename(__FILE__)) . '/languages');
 }
 
 // Create custom log table on activation.
@@ -611,4 +618,65 @@ function dottorbot_render_badge_notification(): void {
 
 add_shortcode('dottorbot_progress', 'dottorbot_render_progress_shortcode');
 add_action('wp_footer', 'dottorbot_render_badge_notification');
+
+/**
+ * Retrieve user preferences for tone and detail level.
+ */
+function dottorbot_get_user_preferences(int $user_id): array {
+    $tone   = get_user_meta($user_id, 'dottorbot_tone', true) ?: 'semplice';
+    $detail = get_user_meta($user_id, 'dottorbot_detail', true) ?: 'breve';
+    return array(
+        'tone'   => $tone,
+        'detail' => $detail,
+    );
+}
+
+/**
+ * Display preference fields on user profile.
+ */
+function dottorbot_user_preferences_fields($user): void {
+    $prefs  = dottorbot_get_user_preferences($user->ID);
+    $tone   = $prefs['tone'];
+    $detail = $prefs['detail'];
+    ?>
+    <h2><?php echo esc_html(__('Preferenze DottorBot', 'dottorbot')); ?></h2>
+    <table class="form-table" role="presentation">
+        <tr>
+            <th><label for="dottorbot_tone"><?php echo esc_html(__('Tono delle risposte', 'dottorbot')); ?></label></th>
+            <td>
+                <select name="dottorbot_tone" id="dottorbot_tone">
+                    <option value="semplice" <?php selected($tone, 'semplice'); ?>><?php echo esc_html(__('Semplice', 'dottorbot')); ?></option>
+                    <option value="esperto" <?php selected($tone, 'esperto'); ?>><?php echo esc_html(__('Esperto', 'dottorbot')); ?></option>
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <th><label for="dottorbot_detail"><?php echo esc_html(__('Livello di dettaglio', 'dottorbot')); ?></label></th>
+            <td>
+                <select name="dottorbot_detail" id="dottorbot_detail">
+                    <option value="breve" <?php selected($detail, 'breve'); ?>><?php echo esc_html(__('Breve', 'dottorbot')); ?></option>
+                    <option value="approfondito" <?php selected($detail, 'approfondito'); ?>><?php echo esc_html(__('Approfondito', 'dottorbot')); ?></option>
+                </select>
+            </td>
+        </tr>
+    </table>
+    <?php
+}
+add_action('show_user_profile', 'dottorbot_user_preferences_fields');
+add_action('edit_user_profile', 'dottorbot_user_preferences_fields');
+
+/**
+ * Save user preferences from profile form.
+ */
+function dottorbot_save_user_preferences(int $user_id): void {
+    if (!current_user_can('edit_user', $user_id)) {
+        return;
+    }
+    $tone   = isset($_POST['dottorbot_tone']) ? sanitize_text_field(wp_unslash($_POST['dottorbot_tone'])) : 'semplice';
+    $detail = isset($_POST['dottorbot_detail']) ? sanitize_text_field(wp_unslash($_POST['dottorbot_detail'])) : 'breve';
+    update_user_meta($user_id, 'dottorbot_tone', in_array($tone, array('semplice', 'esperto'), true) ? $tone : 'semplice');
+    update_user_meta($user_id, 'dottorbot_detail', in_array($detail, array('breve', 'approfondito'), true) ? $detail : 'breve');
+}
+add_action('personal_options_update', 'dottorbot_save_user_preferences');
+add_action('edit_user_profile_update', 'dottorbot_save_user_preferences');
 
