@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function exportData(format) {
       try {
-        const res = await fetch('/wp-json/dottorbot/v1/export?format=' + format, { credentials: 'include' });
+        const res = await fetch('/wp-json/dottorbot/v1/export?format=' + format, { credentials: 'same-origin', headers: { 'X-WP-Nonce': dottorbotPrivacy.nonce } });
         const text = await res.text();
         const blob = new Blob([text], { type: format === 'csv' ? 'text/csv' : 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('db-purge').addEventListener('click', async () => {
       if (!confirm('Eliminare tutti i dati?')) return;
       try {
-        await fetch('/wp-json/dottorbot/v1/purge', { method: 'DELETE', credentials: 'include' });
+        await fetch('/wp-json/dottorbot/v1/purge', { method: 'DELETE', credentials: 'same-origin', headers: { 'X-WP-Nonce': dottorbotPrivacy.nonce } });
       } catch (e) {
         // ignore errors
       } finally {
