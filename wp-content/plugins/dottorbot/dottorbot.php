@@ -129,6 +129,26 @@ function dottorbot_get_usage_limit(int $user_id): int {
 }
 
 /**
+ * Retrieve or assign the A/B test variant for a user.
+ */
+function dottorbot_get_ab_variant(int $user_id): string {
+    $variant = get_user_meta($user_id, 'dottorbot_ab_variant', true);
+    if ($variant) {
+        return (string) $variant;
+    }
+    $enabled = (bool) get_option('dottorbot_ab_enabled', 0);
+    if (!$enabled) {
+        $variant = 'A';
+    } else {
+        $ratio   = (int) get_option('dottorbot_ab_ratio', 50);
+        $variant = (wp_rand(1, 100) <= $ratio) ? 'B' : 'A';
+    }
+    update_user_meta($user_id, 'dottorbot_ab_variant', $variant);
+    dottorbot_log_event($user_id, 'ab_assign', $variant);
+    return $variant;
+}
+
+/**
  * Create a salted hash for audit logging.
  */
 function dottorbot_user_hash(int $user_id, string $action, string $data = ''): string {
@@ -152,6 +172,10 @@ function dottorbot_log_event(int $user_id, string $action, string $data = ''): v
             'created_at' => current_time('mysql', 1),
         ]
     );
+    /**
+     * Allow external analytics systems to hook into event logging.
+     */
+    do_action('dottorbot_event_logged', $user_id, $action, $data);
 }
 
 function dottorbot_diary_table(): string {
@@ -197,6 +221,12 @@ add_action('rest_api_init', function () {
         'permission_callback' => function () {
             return is_user_logged_in();
         },
+    ]);
+
+    register_rest_route('dottorbot/v1', '/event', [
+        'methods'  => 'POST',
+        'callback' => 'dottorbot_rest_event',
+        'permission_callback' => '__return_true',
     ]);
 
     register_rest_route('dottorbot/v1', '/diary', [
@@ -260,10 +290,13 @@ function dottorbot_rest_chat(WP_REST_Request $request): WP_REST_Response {
     dottorbot_log_event($user_id, 'chat', $scrubbed);
     dottorbot_increment_message_count($user_id);
 
+    $variant = dottorbot_get_ab_variant($user_id);
+
     $response = [
         'message' => 'Chat endpoint placeholder',
         'model'   => $model,
         'paywall' => $paywall,
+        'variant' => $variant,
     ];
     if ($paywall) {
         $response['upgrade_url'] = rest_url('dottorbot/v1/stripe/checkout');
@@ -317,6 +350,19 @@ function dottorbot_stripe_checkout(WP_REST_Request $request): WP_REST_Response {
     return new WP_REST_Response(['url' => $url], 200);
 }
 
+function dottorbot_rest_event(WP_REST_Request $request): WP_REST_Response {
+    $user_id = get_current_user_id();
+    if (!$user_id || !dottorbot_user_has_consented($user_id)) {
+        return new WP_REST_Response(['error' => 'Consent required'], 403);
+    }
+    $action = sanitize_text_field($request->get_param('action'));
+    $data   = (string) $request->get_param('data');
+    if ($action) {
+        dottorbot_log_event($user_id, $action, $data);
+    }
+    return new WP_REST_Response(['status' => 'ok'], 200);
+}
+
 function dottorbot_diary_list(WP_REST_Request $request): WP_REST_Response {
     $user_id = get_current_user_id();
     if (!$user_id || !dottorbot_user_has_consented($user_id)) {
@@ -332,6 +378,7 @@ function dottorbot_diary_list(WP_REST_Request $request): WP_REST_Response {
             $entries[]  = $data;
         }
     }
+    dottorbot_log_event($user_id, 'diary_open');
     return new WP_REST_Response($entries, 200);
 }
 
@@ -468,6 +515,14 @@ add_action('admin_menu', function () {
         'dottorbot',
         'dottorbot_render_settings_page'
     );
+
+    add_options_page(
+        __('DottorBot Analytics', 'dottorbot'),
+        __('DottorBot Analytics', 'dottorbot'),
+        'manage_options',
+        'dottorbot-analytics',
+        'dottorbot_render_analytics_page'
+    );
 });
 
 add_action('admin_init', function () {
@@ -477,6 +532,9 @@ add_action('admin_init', function () {
     register_setting('dottorbot_options', 'dottorbot_premium_limit');
     register_setting('dottorbot_options', 'dottorbot_stripe_price_id');
     register_setting('dottorbot_options', 'dottorbot_stripe_secret');
+
+    register_setting('dottorbot_ab', 'dottorbot_ab_enabled');
+    register_setting('dottorbot_ab', 'dottorbot_ab_ratio');
 
     add_settings_section('dottorbot_main', __('General Settings', 'dottorbot'), '__return_false', 'dottorbot');
 
@@ -534,6 +592,54 @@ function dottorbot_render_stripe_price_id_field(): void {
 function dottorbot_render_stripe_secret_field(): void {
     $value = get_option('dottorbot_stripe_secret', '');
     echo '<input type="text" name="dottorbot_stripe_secret" value="' . esc_attr($value) . '" class="regular-text" />';
+}
+
+function dottorbot_render_analytics_page(): void {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    global $wpdb;
+    $table = $wpdb->prefix . 'dottorbot_logs';
+    $rows  = $wpdb->get_results("SELECT action, COUNT(*) AS total FROM {$table} GROUP BY action ORDER BY total DESC", ARRAY_A);
+    ?>
+    <div class="wrap">
+        <h1><?php esc_html_e('DottorBot Analytics', 'dottorbot'); ?></h1>
+        <table class="widefat">
+            <thead>
+                <tr>
+                    <th><?php esc_html_e('Event', 'dottorbot'); ?></th>
+                    <th><?php esc_html_e('Count', 'dottorbot'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                if ($rows) {
+                    foreach ($rows as $row) {
+                        echo '<tr><td>' . esc_html($row['action']) . '</td><td>' . esc_html($row['total']) . '</td></tr>';
+                    }
+                } else {
+                    echo '<tr><td colspan="2">' . esc_html__('No data', 'dottorbot') . '</td></tr>';
+                }
+                ?>
+            </tbody>
+        </table>
+        <h2><?php esc_html_e('A/B Test', 'dottorbot'); ?></h2>
+        <form action="options.php" method="post">
+            <?php settings_fields('dottorbot_ab'); ?>
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th scope="row"><?php esc_html_e('Enable A/B Test', 'dottorbot'); ?></th>
+                    <td><input type="checkbox" name="dottorbot_ab_enabled" value="1" <?php checked(1, get_option('dottorbot_ab_enabled', 0)); ?> /></td>
+                </tr>
+                <tr>
+                    <th scope="row"><?php esc_html_e('Variant B Percentage', 'dottorbot'); ?></th>
+                    <td><input type="number" name="dottorbot_ab_ratio" value="<?php echo esc_attr(get_option('dottorbot_ab_ratio', 50)); ?>" min="0" max="100" /> %</td>
+                </tr>
+            </table>
+            <?php submit_button(); ?>
+        </form>
+    </div>
+    <?php
 }
 
 /**
@@ -697,4 +803,24 @@ function dottorbot_save_user_preferences(int $user_id): void {
 }
 add_action('personal_options_update', 'dottorbot_save_user_preferences');
 add_action('edit_user_profile_update', 'dottorbot_save_user_preferences');
+
+/**
+ * Enqueue front-end tracking script for source clicks.
+ */
+function dottorbot_enqueue_scripts(): void {
+    if (!is_user_logged_in()) {
+        return;
+    }
+    wp_register_script('dottorbot-tracking', '', [], false, true);
+    wp_enqueue_script('dottorbot-tracking');
+    $url   = esc_url_raw(rest_url('dottorbot/v1/event'));
+    $nonce = wp_create_nonce('wp_rest');
+    $script = sprintf(
+        "document.addEventListener('click',function(e){var l=e.target.closest('[data-dottorbot-source]');if(!l){return;}fetch('%s',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-WP-Nonce':'%s'},body:JSON.stringify({action:'source_click',data:l.href})});});",
+        $url,
+        $nonce
+    );
+    wp_add_inline_script('dottorbot-tracking', $script);
+}
+add_action('wp_enqueue_scripts', 'dottorbot_enqueue_scripts');
 
