@@ -817,6 +817,26 @@ function dottorbot_render_badge_notification(): void {
     }
 }
 
+function dottorbot_render_chat_shortcode() {
+    wp_enqueue_script('dottorbot-chat');
+    return '<div id="dottorbot-chat"></div>';
+}
+
+function dottorbot_render_diary_shortcode() {
+    wp_enqueue_script('dottorbot-diary');
+    wp_enqueue_script('chartjs');
+    wp_enqueue_script('jspdf');
+    return '<div id="dottorbot-diary"></div>';
+}
+
+function dottorbot_render_privacy_shortcode() {
+    wp_enqueue_script('dottorbot-privacy');
+    return '<button id="dottorbot-privacy-open">' . esc_html__('Privacy', 'dottorbot') . '</button>';
+}
+
+add_shortcode('dottorbot', 'dottorbot_render_chat_shortcode');
+add_shortcode('dottorbot_diary', 'dottorbot_render_diary_shortcode');
+add_shortcode('dottorbot_privacy', 'dottorbot_render_privacy_shortcode');
 add_shortcode('dottorbot_progress', 'dottorbot_render_progress_shortcode');
 add_action('wp_footer', 'dottorbot_render_badge_notification');
 
