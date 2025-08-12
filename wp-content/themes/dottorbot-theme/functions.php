@@ -6,6 +6,11 @@ function dottorbot_theme_setup() {
 }
 add_action('after_setup_theme', 'dottorbot_theme_setup');
 
+function dottorbot_add_manifest() {
+    echo '<link rel="manifest" href="' . esc_url(get_template_directory_uri() . '/manifest.json') . '">';
+}
+add_action('wp_head', 'dottorbot_add_manifest');
+
 function dottorbot_enqueue_assets() {
     $theme_dir = get_template_directory_uri();
     $style_path = get_template_directory() . '/dist/style.css';
@@ -22,6 +27,11 @@ function dottorbot_enqueue_assets() {
         wp_enqueue_script('chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), null, true);
         wp_enqueue_script('jspdf', 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', array(), null, true);
         wp_enqueue_script('dottorbot-diary', $theme_dir . '/dist/diary.js', array('chartjs', 'jspdf'), filemtime($diary_path), true);
+
+    $pwa_path = get_template_directory() . '/dist/pwa.js';
+    if (file_exists($pwa_path)) {
+        wp_enqueue_script('dottorbot-pwa', $theme_dir . '/dist/pwa.js', array(), filemtime($pwa_path), true);
+        dottorbot_localize_pwa();
     }
 }
 add_action('wp_enqueue_scripts', 'dottorbot_enqueue_assets');
@@ -53,3 +63,18 @@ function dottorbot_register_block() {
     ));
 }
 add_action('init', 'dottorbot_register_block');
+
+function dottorbot_localize_pwa() {
+    wp_localize_script('dottorbot-pwa', 'dottorbotPwa', array(
+        'swUrl' => get_template_directory_uri() . '/service-worker.js',
+        'restUrl' => rest_url('dottorbot/v1/subscribe'),
+        'vapidPublicKey' => dottorbot_get_vapid_public_key(),
+    ));
+}
+
+function dottorbot_schedule_reminder() {
+    if (!wp_next_scheduled('dottorbot_daily_reminder')) {
+        wp_schedule_event(time(), 'daily', 'dottorbot_daily_reminder');
+    }
+}
+add_action('init', 'dottorbot_schedule_reminder');
