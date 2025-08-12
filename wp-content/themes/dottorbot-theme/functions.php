@@ -71,7 +71,7 @@ function dottorbot_register_block() {
     );
     register_block_type('dottorbot/chat', array(
         'editor_script' => 'dottorbot-block-editor',
-        'render_callback' => 'dottorbot_render_shortcode',
+        'render_callback' => 'dottorbot_render_chat_shortcode',
     ));
 }
 add_action('init', 'dottorbot_register_block');
