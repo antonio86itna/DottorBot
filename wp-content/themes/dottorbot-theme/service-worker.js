@@ -4,6 +4,8 @@ const ASSETS = [
   '/wp-content/themes/dottorbot-theme/dist/chat.js',
   '/wp-content/themes/dottorbot-theme/dist/diary.js',
   '/wp-content/themes/dottorbot-theme/dist/pwa.js',
+  '/diario',
+  '/wp-json/dottorbot/v1/diary',
   '/'
 ];
 
@@ -25,12 +27,35 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  const { pathname } = new URL(event.request.url);
+
+  if (pathname === '/wp-json/dottorbot/v1/diary') {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then(resp => resp || fetch(event.request).then(response => {
-      const clone = response.clone();
-      caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-      return response;
-    }).catch(() => caches.match('/')))
+    caches
+      .match(event.request)
+      .then(
+        resp =>
+          resp ||
+          fetch(event.request)
+            .then(response => {
+              const clone = response.clone();
+              caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+              return response;
+            })
+            .catch(() => caches.match('/'))
+      )
   );
 });
 
