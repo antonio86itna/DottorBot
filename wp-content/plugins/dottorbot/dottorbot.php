@@ -340,6 +340,7 @@ function dottorbot_diary_create(WP_REST_Request $request): WP_REST_Response {
     ]);
     $entry['id'] = (int) $wpdb->insert_id;
     dottorbot_log_event($user_id, 'diary_create');
+    dottorbot_update_badges($user_id);
     return new WP_REST_Response($entry, 201);
 }
 
@@ -509,4 +510,105 @@ function dottorbot_render_stripe_secret_field(): void {
     $value = get_option('dottorbot_stripe_secret', '');
     echo '<input type="text" name="dottorbot_stripe_secret" value="' . esc_attr($value) . '" class="regular-text" />';
 }
+
+/**
+ * Update weekly note streaks and badges.
+ */
+function dottorbot_update_badges(int $user_id): void {
+    global $wpdb;
+    $table = dottorbot_diary_table();
+    $count = (int) $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT COUNT(*) FROM $table WHERE user_id = %d AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 7 DAY)",
+            $user_id
+        )
+    );
+
+    update_user_meta($user_id, 'dottorbot_weekly_notes', $count);
+
+    $current_week = gmdate('oW');
+    $last_week    = get_user_meta($user_id, 'dottorbot_last_badge_week', true);
+
+    if ($count >= 3 && $last_week !== $current_week) {
+        $prev_week = gmdate('oW', strtotime('-7 days'));
+        $streak    = ($last_week === $prev_week) ? (int) get_user_meta($user_id, 'dottorbot_streak', true) + 1 : 1;
+        update_user_meta($user_id, 'dottorbot_streak', $streak);
+        update_user_meta($user_id, 'dottorbot_last_badge_week', $current_week);
+
+        $badges = (array) get_user_meta($user_id, 'dottorbot_badges', true);
+        if (!in_array('weekly_3_notes', $badges, true)) {
+            $badges[] = 'weekly_3_notes';
+            update_user_meta($user_id, 'dottorbot_badges', $badges);
+        }
+
+        update_user_meta($user_id, 'dottorbot_premium', 1);
+        update_user_meta($user_id, 'dottorbot_show_badge_notification', 1);
+    } elseif ($count < 3 && $last_week && $last_week !== $current_week) {
+        $prev_week = gmdate('oW', strtotime('-7 days'));
+        if ($last_week !== $prev_week) {
+            update_user_meta($user_id, 'dottorbot_streak', 0);
+        }
+    }
+}
+
+/**
+ * Shortcode to render progress ring for weekly notes.
+ */
+function dottorbot_render_progress_shortcode(): string {
+    if (!is_user_logged_in()) {
+        return '';
+    }
+    $user_id = get_current_user_id();
+    $count   = (int) get_user_meta($user_id, 'dottorbot_weekly_notes', true);
+    $max     = 3;
+    ob_start();
+    ?>
+    <div id="dottorbot-progress" data-count="<?php echo esc_attr($count); ?>">
+        <svg class="dottorbot-progress-ring" width="120" height="120">
+            <circle class="dottorbot-progress-ring__bg" stroke="#eee" stroke-width="10" fill="transparent" r="52" cx="60" cy="60"></circle>
+            <circle class="dottorbot-progress-ring__circle" stroke="#4caf50" stroke-width="10" fill="transparent" r="52" cx="60" cy="60"></circle>
+        </svg>
+        <div class="dottorbot-progress-ring__text"><?php echo esc_html($count . '/' . $max); ?></div>
+    </div>
+    <style>
+        .dottorbot-progress-ring { position: relative; }
+        .dottorbot-progress-ring__circle { transition: stroke-dashoffset 0.35s; transform: rotate(-90deg); transform-origin: 50% 50%; }
+        .dottorbot-progress-ring__text { position:absolute; top:0; left:0; width:120px; height:120px; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+        .dottorbot-badge-notice { position:fixed; bottom:20px; right:20px; background:#4caf50; color:#fff; padding:10px 20px; border-radius:4px; }
+    </style>
+    <script>
+    (function(){
+        var container = document.getElementById('dottorbot-progress');
+        if (!container) return;
+        var count = parseInt(container.dataset.count, 10) || 0;
+        var max = <?php echo (int) $max; ?>;
+        var circle = container.querySelector('.dottorbot-progress-ring__circle');
+        var radius = circle.r.baseVal.value;
+        var circumference = 2 * Math.PI * radius;
+        circle.style.strokeDasharray = circumference;
+        circle.style.strokeDashoffset = circumference;
+        var percent = Math.min(count / max, 1);
+        circle.style.strokeDashoffset = circumference - percent * circumference;
+    })();
+    </script>
+    <?php
+    return ob_get_clean();
+}
+
+/**
+ * Display badge notification when earned.
+ */
+function dottorbot_render_badge_notification(): void {
+    if (!is_user_logged_in()) {
+        return;
+    }
+    $user_id = get_current_user_id();
+    if (get_user_meta($user_id, 'dottorbot_show_badge_notification', true)) {
+        echo '<div class="dottorbot-badge-notice">' . esc_html__('Badge settimanale sbloccato! Contenuti premium attivati.', 'dottorbot') . '</div>';
+        delete_user_meta($user_id, 'dottorbot_show_badge_notification');
+    }
+}
+
+add_shortcode('dottorbot_progress', 'dottorbot_render_progress_shortcode');
+add_action('wp_footer', 'dottorbot_render_badge_notification');
 
