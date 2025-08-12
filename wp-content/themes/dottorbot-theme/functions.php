@@ -1,4 +1,6 @@
 <?php
+require_once get_template_directory() . '/api.php';
+
 function dottorbot_enqueue_assets() {
     $theme_dir = get_template_directory_uri();
     $style_path = get_template_directory() . '/dist/style.css';
