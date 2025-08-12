@@ -41,6 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.documentElement.classList.toggle('reduced-motion', e.matches);
   });
 
+  const history = JSON.parse(localStorage.getItem('dottorbotHistory') || '[]');
+  history.forEach(msg => appendMessage(msg.role, msg.text));
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = input.value.trim();
@@ -70,6 +73,8 @@ document.addEventListener('DOMContentLoaded', () => {
     p.textContent = text;
     messages.appendChild(p);
     messages.scrollTop = messages.scrollHeight;
+    history.push({ role, text });
+    localStorage.setItem('dottorbotHistory', JSON.stringify(history));
   }
 
   function showPaywall(url) {
