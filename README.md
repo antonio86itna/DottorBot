@@ -27,11 +27,13 @@ Assistente AI **informativo** per la salute. Chat, diario, suggerimenti prudenti
 4. Output strutturato + **disclaimer** obbligatorio.
 
 ## Installazione (dev)
-1. Clona la repo.  
-2. Copia il tema `wp-content/themes/dottorbot-theme` e il plugin `wp-content/plugins/dottorbot`.  
-3. In WordPress → Attiva tema e plugin.  
-4. In **Impostazioni → DottorBot** incolla le API key e scegli il modello default.
-5. Aggiungi lo shortcode `[dottorbot]` per la chat o `[dottorbot_diary]` per il diario con grafici.
+1. Clona la repo.
+2. Nella root esegui `npm install` e `npm run build` per generare CSS/JS.
+3. Vai in `wp-content/themes/dottorbot-theme` ed esegui `composer install --no-dev`.
+4. Copia il tema `wp-content/themes/dottorbot-theme` e il plugin `wp-content/plugins/dottorbot` nella tua installazione WordPress.
+5. In WordPress attiva tema e plugin.
+6. Crea una nuova pagina e inserisci lo shortcode `[dottorbot]` (o `[dottorbot_diary]` per il diario con grafici).
+7. In **Impostazioni → DottorBot** incolla le API key e scegli il modello default.
 
 ## Abbonamenti
 - Free: X risposte/mese, diario base.  
