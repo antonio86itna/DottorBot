@@ -1,0 +1,3 @@
+node_modules/
+wp-content/themes/dottorbot-theme/node_modules/
+wp-content/themes/dottorbot-theme/dist/*.map
