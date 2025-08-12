@@ -38,7 +38,12 @@ Fornire risposte **informative** su salute e benessere con toni prudenti, citazi
 - Nessuna PII nei log. Conservazione minima, purge schedulato.
 
 ## Limiti dichiarati
-- Non è telemedicina; non fornisce diagnosi o prescrizioni.  
-- Contenuti aggiornabili via ricerca web, ma potrebbero non riflettere l’ultima evidenza clinica.  
+- Non è telemedicina; non fornisce diagnosi o prescrizioni.
+- Contenuti aggiornabili via ricerca web, ma potrebbero non riflettere l’ultima evidenza clinica.
 - Per questioni urgenti o personali, consultare un professionista sanitario.
+
+## Note per sviluppatori
+- Dopo ogni clone o pull eseguire `npm install` e `npm run build` per rigenerare CSS/JS.
+- Nella cartella `wp-content/themes/dottorbot-theme` lanciare `composer install --no-dev`.
+- Garantire accessibilità (WCAG 2.2 AA) e internazionalizzazione di tutte le interfacce.
 
