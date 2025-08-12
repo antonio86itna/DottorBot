@@ -17,7 +17,7 @@ function dottorbot_install(): void {
     $table_name      = $wpdb->prefix . 'dottorbot_logs';
     $charset_collate = $wpdb->get_charset_collate();
 
-    $sql = "CREATE TABLE $table_name (
+    $sql_logs = "CREATE TABLE $table_name (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         user_id BIGINT UNSIGNED NOT NULL,
         action VARCHAR(50) NOT NULL,
@@ -27,8 +27,19 @@ function dottorbot_install(): void {
         KEY user_id (user_id)
     ) $charset_collate;";
 
+    $diary_table = $wpdb->prefix . 'dottorbot_diary';
+    $sql_diary  = "CREATE TABLE $diary_table (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        user_id BIGINT UNSIGNED NOT NULL,
+        entry LONGTEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY  (id),
+        KEY user_id (user_id)
+    ) $charset_collate;";
+
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-    dbDelta($sql);
+    dbDelta($sql_logs);
+    dbDelta($sql_diary);
 }
 
 /**
@@ -95,6 +106,35 @@ function dottorbot_log_event(int $user_id, string $action, string $data = ''): v
     );
 }
 
+function dottorbot_diary_table(): string {
+    global $wpdb;
+    return $wpdb->prefix . 'dottorbot_diary';
+}
+
+function dottorbot_diary_key(): string {
+    $secret = defined('DOTTORBOT_DIARY_KEY') ? DOTTORBOT_DIARY_KEY : AUTH_KEY;
+    return hash('sha256', $secret, true);
+}
+
+function dottorbot_diary_encrypt(array $entry): string {
+    $key = dottorbot_diary_key();
+    $iv  = random_bytes(16);
+    $payload = openssl_encrypt(json_encode($entry), 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+    return base64_encode($iv . $payload);
+}
+
+function dottorbot_diary_decrypt(string $data): ?array {
+    $key = dottorbot_diary_key();
+    $raw = base64_decode($data, true);
+    if (!$raw || strlen($raw) < 17) {
+        return null;
+    }
+    $iv   = substr($raw, 0, 16);
+    $cipher = substr($raw, 16);
+    $json = openssl_decrypt($cipher, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+    return $json ? json_decode($json, true) : null;
+}
+
 // Register REST API routes.
 add_action('rest_api_init', function () {
     register_rest_route('dottorbot/v1', '/chat', [
@@ -104,8 +144,26 @@ add_action('rest_api_init', function () {
     ]);
 
     register_rest_route('dottorbot/v1', '/diary', [
-        'methods'  => 'POST',
-        'callback' => 'dottorbot_rest_diary',
+        'methods'  => WP_REST_Server::READABLE,
+        'callback' => 'dottorbot_diary_list',
+        'permission_callback' => '__return_true',
+    ]);
+
+    register_rest_route('dottorbot/v1', '/diary', [
+        'methods'  => WP_REST_Server::CREATABLE,
+        'callback' => 'dottorbot_diary_create',
+        'permission_callback' => '__return_true',
+    ]);
+
+    register_rest_route('dottorbot/v1', '/diary/(?P<id>\d+)', [
+        'methods'  => WP_REST_Server::EDITABLE,
+        'callback' => 'dottorbot_diary_update',
+        'permission_callback' => '__return_true',
+    ]);
+
+    register_rest_route('dottorbot/v1', '/diary/(?P<id>\d+)', [
+        'methods'  => WP_REST_Server::DELETABLE,
+        'callback' => 'dottorbot_diary_delete',
         'permission_callback' => '__return_true',
     ]);
 
@@ -143,17 +201,91 @@ function dottorbot_rest_chat(WP_REST_Request $request): WP_REST_Response {
     return new WP_REST_Response(['message' => 'Chat endpoint placeholder'], 200);
 }
 
-function dottorbot_rest_diary(WP_REST_Request $request): WP_REST_Response {
+function dottorbot_diary_list(WP_REST_Request $request): WP_REST_Response {
     $user_id = get_current_user_id();
     if (!$user_id || !dottorbot_user_has_consented($user_id)) {
         return new WP_REST_Response(['error' => 'Consent required'], 403);
     }
+    global $wpdb;
+    $rows = $wpdb->get_results($wpdb->prepare('SELECT id, entry FROM ' . dottorbot_diary_table() . ' WHERE user_id=%d ORDER BY created_at ASC', $user_id), ARRAY_A);
+    $entries = [];
+    foreach ($rows as $row) {
+        $data = dottorbot_diary_decrypt($row['entry']);
+        if ($data) {
+            $data['id'] = (int) $row['id'];
+            $entries[]  = $data;
+        }
+    }
+    return new WP_REST_Response($entries, 200);
+}
 
-    $entry    = (string) $request->get_param('entry');
-    $scrubbed = dottorbot_scrub_pii($entry);
-    dottorbot_log_event($user_id, 'diary', $scrubbed);
+function dottorbot_diary_create(WP_REST_Request $request): WP_REST_Response {
+    $user_id = get_current_user_id();
+    if (!$user_id || !dottorbot_user_has_consented($user_id)) {
+        return new WP_REST_Response(['error' => 'Consent required'], 403);
+    }
+    $entry = [
+        'timestamp' => (int) ($request->get_param('timestamp') ?? time()),
+        'mood'      => (int) $request->get_param('mood'),
+        'symptoms'  => (int) $request->get_param('symptoms'),
+        'notes'     => (string) $request->get_param('notes'),
+    ];
+    $enc = dottorbot_diary_encrypt($entry);
+    global $wpdb;
+    $wpdb->insert(dottorbot_diary_table(), [
+        'user_id'    => $user_id,
+        'entry'      => $enc,
+        'created_at' => current_time('mysql', 1),
+    ]);
+    $entry['id'] = (int) $wpdb->insert_id;
+    dottorbot_log_event($user_id, 'diary_create');
+    return new WP_REST_Response($entry, 201);
+}
 
-    return new WP_REST_Response(['message' => 'Diary endpoint placeholder'], 200);
+function dottorbot_diary_update(WP_REST_Request $request): WP_REST_Response {
+    $user_id = get_current_user_id();
+    if (!$user_id || !dottorbot_user_has_consented($user_id)) {
+        return new WP_REST_Response(['error' => 'Consent required'], 403);
+    }
+    $id    = (int) $request['id'];
+    $entry = [
+        'timestamp' => (int) ($request->get_param('timestamp') ?? time()),
+        'mood'      => (int) $request->get_param('mood'),
+        'symptoms'  => (int) $request->get_param('symptoms'),
+        'notes'     => (string) $request->get_param('notes'),
+    ];
+    $enc = dottorbot_diary_encrypt($entry);
+    global $wpdb;
+    $wpdb->update(dottorbot_diary_table(), ['entry' => $enc], ['id' => $id, 'user_id' => $user_id]);
+    $entry['id'] = $id;
+    dottorbot_log_event($user_id, 'diary_update');
+    return new WP_REST_Response($entry, 200);
+}
+
+function dottorbot_diary_delete(WP_REST_Request $request): WP_REST_Response {
+    $user_id = get_current_user_id();
+    if (!$user_id || !dottorbot_user_has_consented($user_id)) {
+        return new WP_REST_Response(['error' => 'Consent required'], 403);
+    }
+    $id = (int) $request['id'];
+    global $wpdb;
+    $wpdb->delete(dottorbot_diary_table(), ['id' => $id, 'user_id' => $user_id]);
+    dottorbot_log_event($user_id, 'diary_delete');
+    return new WP_REST_Response(['deleted' => true], 200);
+}
+
+function dottorbot_diary_fetch_all(int $user_id): array {
+    global $wpdb;
+    $rows = $wpdb->get_results($wpdb->prepare('SELECT id, entry FROM ' . dottorbot_diary_table() . ' WHERE user_id=%d ORDER BY created_at ASC', $user_id), ARRAY_A);
+    $entries = [];
+    foreach ($rows as $row) {
+        $data = dottorbot_diary_decrypt($row['entry']);
+        if ($data) {
+            $data['id'] = (int) $row['id'];
+            $entries[]  = $data;
+        }
+    }
+    return $entries;
 }
 
 function dottorbot_rest_export(WP_REST_Request $request): WP_REST_Response {
@@ -162,8 +294,23 @@ function dottorbot_rest_export(WP_REST_Request $request): WP_REST_Response {
         return new WP_REST_Response(['error' => 'Consent required'], 403);
     }
 
-    dottorbot_log_event($user_id, 'export');
-    return new WP_REST_Response(['message' => 'Export endpoint placeholder'], 200);
+    $format  = strtolower((string) $request->get_param('format'));
+    $entries = dottorbot_diary_fetch_all($user_id);
+    dottorbot_log_event($user_id, 'export', $format ?: 'json');
+
+    if ('csv' === $format) {
+        $fh = fopen('php://temp', 'r+');
+        fputcsv($fh, ['id', 'timestamp', 'mood', 'symptoms', 'notes']);
+        foreach ($entries as $e) {
+            fputcsv($fh, [$e['id'], $e['timestamp'], $e['mood'], $e['symptoms'], $e['notes']]);
+        }
+        rewind($fh);
+        $csv = stream_get_contents($fh);
+        fclose($fh);
+        return new WP_REST_Response($csv, 200, ['Content-Type' => 'text/csv']);
+    }
+
+    return new WP_REST_Response($entries, 200);
 }
 
 function dottorbot_rest_purge(WP_REST_Request $request): WP_REST_Response {
