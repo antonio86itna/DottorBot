@@ -27,6 +27,7 @@ function dottorbot_enqueue_assets() {
         wp_enqueue_script('chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), null, true);
         wp_enqueue_script('jspdf', 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', array(), null, true);
         wp_enqueue_script('dottorbot-diary', $theme_dir . '/dist/diary.js', array('chartjs', 'jspdf'), filemtime($diary_path), true);
+    }
 
     $pwa_path = get_template_directory() . '/dist/pwa.js';
     if (file_exists($pwa_path)) {
