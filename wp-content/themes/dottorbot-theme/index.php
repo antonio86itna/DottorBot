@@ -7,6 +7,7 @@
     <?php wp_head(); ?>
 </head>
 <body <?php body_class(); ?>>
+    <?php wp_body_open(); ?>
     <main class="prose mx-auto p-4">
     <?php
     if (have_posts()) {
