@@ -818,8 +818,12 @@ function dottorbot_render_badge_notification(): void {
 }
 
 function dottorbot_render_chat_shortcode() {
+    $chat_path = get_template_directory() . '/dist/chat.js';
+    if (!file_exists($chat_path)) {
+        return '<div class="dottorbot-missing-js">' . esc_html__('File dist/chat.js mancante. Esegui `npm run build`.', 'dottorbot') . '</div>';
+    }
     wp_enqueue_script('dottorbot-chat');
-    return '<div id="dottorbot-chat"></div>';
+    return '<div id="dottorbot-chat"><noscript>Attiva JavaScript per usare DottorBot.</noscript></div>';
 }
 
 function dottorbot_render_diary_shortcode() {
