@@ -12,40 +12,70 @@ function dottorbot_add_manifest() {
 add_action('wp_head', 'dottorbot_add_manifest');
 
 function dottorbot_enqueue_assets() {
-    $theme_dir = get_template_directory_uri();
+    $theme_dir  = get_template_directory_uri();
     $style_path = get_template_directory() . '/dist/style.css';
     if (file_exists($style_path)) {
         wp_enqueue_style('dottorbot-theme', $theme_dir . '/dist/style.css', array(), filemtime($style_path));
     }
+
+    if (!is_singular()) {
+        return;
+    }
+
+    global $post;
+    if (!($post instanceof WP_Post)) {
+        return;
+    }
+
+    $content = $post->post_content;
+
     $chat_path = get_template_directory() . '/dist/chat.js';
     if (file_exists($chat_path)) {
-        wp_enqueue_script('dottorbot-chat', $theme_dir . '/dist/chat.js', array(), filemtime($chat_path), true);
+        wp_register_script('dottorbot-chat', $theme_dir . '/dist/chat.js', array(), filemtime($chat_path), true);
         wp_localize_script('dottorbot-chat', 'dottorbotChat', array(
             'nonce' => wp_create_nonce('wp_rest'),
         ));
+        if (has_shortcode($content, 'dottorbot')) {
+            wp_enqueue_script('dottorbot-chat');
+        }
     }
 
     $privacy_path = get_template_directory() . '/dist/privacy.js';
     if (file_exists($privacy_path)) {
-        wp_enqueue_script('dottorbot-privacy', $theme_dir . '/dist/privacy.js', array(), filemtime($privacy_path), true);
+        wp_register_script('dottorbot-privacy', $theme_dir . '/dist/privacy.js', array(), filemtime($privacy_path), true);
         wp_localize_script('dottorbot-privacy', 'dottorbotPrivacy', array(
             'nonce' => wp_create_nonce('wp_rest'),
         ));
+        if (has_shortcode($content, 'dottorbot_privacy')) {
+            wp_enqueue_script('dottorbot-privacy');
+        }
     }
 
     $diary_path = get_template_directory() . '/dist/diary.js';
     if (file_exists($diary_path)) {
-        wp_enqueue_script('chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), null, true);
-        wp_enqueue_script('jspdf', 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', array(), null, true);
-        wp_enqueue_script('dottorbot-diary', $theme_dir . '/dist/diary.js', array('chartjs', 'jspdf'), filemtime($diary_path), true);
+        wp_register_script('chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', array(), null, true);
+        wp_register_script('jspdf', 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', array(), null, true);
+        wp_register_script(
+            'dottorbot-diary',
+            $theme_dir . '/dist/diary.js',
+            array('chartjs', 'jspdf'),
+            filemtime($diary_path),
+            true
+        );
         wp_localize_script('dottorbot-diary', 'dottorbotDiary', array(
             'nonce' => wp_create_nonce('wp_rest'),
         ));
+        if (has_shortcode($content, 'dottorbot_diary')) {
+            wp_enqueue_script('chartjs');
+            wp_enqueue_script('jspdf');
+            wp_enqueue_script('dottorbot-diary');
+        }
     }
 
     $pwa_path = get_template_directory() . '/dist/pwa.js';
     if (file_exists($pwa_path)) {
-        wp_enqueue_script('dottorbot-pwa', $theme_dir . '/dist/pwa.js', array(), filemtime($pwa_path), true);
+        wp_register_script('dottorbot-pwa', $theme_dir . '/dist/pwa.js', array(), filemtime($pwa_path), true);
+        wp_enqueue_script('dottorbot-pwa');
         dottorbot_localize_pwa();
     }
 }
